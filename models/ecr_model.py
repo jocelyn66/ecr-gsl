@@ -1,6 +1,4 @@
-from cgi import test
 from json import encoder
-from turtle import shape
 import torch
 import torch.nn as nn
 from utils.name2object import name2gsl, name2init

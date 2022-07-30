@@ -86,7 +86,7 @@ class GAEOptimizer(object):
         self.optimizer = optimizer
         self.beta = beta
         if self.beta>0:
-            self.loss_fn = self.loss_function_gvae_nuclear_norm if model.gsl_name=='gave' else self.loss_function_gae_nuclear_norm2
+            self.loss_fn = self.loss_function_gvae_nuclear_norm if model.gsl_name=='gave' else self.loss_function_gae_nuclear_norm
         else:
             self.loss_fn = self.loss_function_gvae if model.gsl_name=='gave' else self.loss_function_gae
         # self.loss_fn = nn.CrossEntropyLoss(reduction='mean')

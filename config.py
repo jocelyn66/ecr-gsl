@@ -1,8 +1,5 @@
 import argparse
-from audioop import add
-from email.policy import default
 
-from yaml import parse
 
 # data configuration#####################
 parser = argparse.ArgumentParser()
@@ -26,6 +23,8 @@ parser.add_argument("--debug", action="store_true",
 parser.add_argument("--double-precision", action="store_true",
                     help="Machine precision")
 parser.add_argument("--save-freq", type=int, default=1000)
+parser.add_argument("--seed", type=int, default=22)
+parser.add_argument("--gpu-num", type=int, default=0)
 
 # training configuration###############
 parser.add_argument("--regularizer", choices=[None, "N3", "F2"], default=None,
@@ -35,7 +34,7 @@ parser.add_argument("--reg", default=0, type=float,
 
 parser.add_argument("--optimizer", choices=["Adagrad", "Adam"], default="Adam",
                     help="Optimizer")
-parser.add_argument("--max-epochs", default=200, type=int,
+parser.add_argument("--max-epochs", default=100, type=int,
                     help="Maximum number of epochs to train for")
 parser.add_argument("--patience", default=500, type=int,
                     help="Number of epochs before early stopping")
@@ -51,7 +50,7 @@ parser.add_argument("--learning-rate", default=1e-5, type=float,
 parser.add_argument('--weight_decay', type=float, default=1e-2)
 
 # regularization
-parser.add_argument("--beta", type=float, default=1.5, help="weight of nuclear norm")
+parser.add_argument("--beta", type=float, default=0., help="weight of nuclear norm")
 
 # configuration for optimal parameters
 parser.add_argument("--rand-search", "--rs", action='store_true',

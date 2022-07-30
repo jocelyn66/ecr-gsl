@@ -152,7 +152,7 @@ def test(model_dir, num=-1, threshold=0.5):
     if args.use_cuda:
         model.cuda()
 
-    model_name = "model{}_feat-d{}_h1-d{}_h2-d{}.pt".format(num, args.feat_dim, args.hidden1, args.hidden2)
+    model_name = "{}model100_feat-d{}_h1-d{}_h2-d{}.pt".format(num, args.feat_dim, args.hidden1, args.hidden2)
     print(model_name)
     model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
 
@@ -180,6 +180,10 @@ def test(model_dir, num=-1, threshold=0.5):
         print("event coref:")
         orig_adj = dataset.event_coref_adj[split]
         pred_adj_ = pred_adj[dataset.event_idx[split], :][:, dataset.event_idx[split]]
+
+        nuclear_norm = np.linalg.norm(pred_adj_, ord='nuc')
+        print("\tnuclear norm/rank:", nuclear_norm)
+        
         degree_analysis(model_dir, split+' event coref', orig_adj, pred_adj_, num, threshold)
         print("\tdegree analysis done")
 

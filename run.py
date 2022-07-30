@@ -3,8 +3,6 @@ import logging
 import os
 import sys
 import time
-from numpy import save
-from sklearn.model_selection import PredefinedSplit
 
 import torch.optim
 import math
@@ -55,6 +53,8 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
 
     # config
     start_model = datetime.datetime.now()
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     torch.manual_seed(2022)
 
     if args.rand_search:
@@ -161,6 +161,9 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
     use_cuda = torch.cuda.is_available()
     if not use_cuda:
         ValueError("WARNING: CUDA is not available!")
+  
+    torch.cuda.manual_seed(args.seed)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_num)
     args.device = torch.device("cuda" if use_cuda else "cpu")
 
     # adj_train = torch.tensor(adj_train, device=args.device)

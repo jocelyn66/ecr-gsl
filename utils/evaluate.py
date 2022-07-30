@@ -103,6 +103,8 @@ def visual_graph(path, split, orig, pred_adj, num=-1, threshold=0.5):  # 输入�
     # plot_adj(path, split+" original visual graph", orig, num)  # 原图
     
     pred_adj_ = np.where(pred_adj>threshold, 1, 0)
+    nuclear_norm = np.linalg.norm(pred_adj_, ord='nuc')
+    print("\tnuclear norm/rank:", nuclear_norm)
     plot_adj(path, split+" pred graph - visual", pred_adj_, num=num)
 
     # plot_adj(path, split+" weighted pred visual graph", pred_adj, num=num, weighted=True)
