@@ -78,19 +78,17 @@ from torch import nn
 
 class GAEOptimizer(object):
 
-    def __init__(self, args, model, optimizer, norm, pos_weight):
+    def __init__(self, args, model, optimizer, norm, pos_weight, use_cuda):
         self.model = model
         self.optimizer = optimizer
         self.alpha = args.alpha
         self.beta = args.beta
         self.gamma = args.gamma
 
-        if self.beta>0:
-            self.loss_fn = self.loss_function_gvae1 if model.gsl_name=='gave' else self.loss_function_gae1
-        else:
-            self.loss_fn = self.loss_function_gvae if model.gsl_name=='gave' else self.loss_function_gae
+        loss = {0:self.loss_function_gae, 1:self.loss_function_gae1, 2:self.loss_function_gae2, 3:self.loss_function_gae3, 4:self.loss_function_gae4}
+        self.loss_fn = loss[args.loss_type]
         # self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
-        self.use_cuda = args.use_cuda
+        self.use_cuda = use_cuda
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
         self.valid_freq = args.valid_freq
         self.n_nodes = args.n_nodes
@@ -127,7 +125,6 @@ class GAEOptimizer(object):
 
     def loss_function_gae(self, preds, orig, mu, logvar, split='Train'):
         """GAE"""
-
         cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
 
         # see Appendix B from VAE paper:
@@ -157,9 +154,10 @@ class GAEOptimizer(object):
         
         nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
         l1_norm = torch.norm(self.model.H, p=1)
-        f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
+        # f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
 
-        return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
+        # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
+        return cost + self.beta*nuclear_norm + self.alpha * l1_norm
 
     def loss_function_gae3(self, preds, orig, mu, logvar, split='Train'):
         """L = CE(A,A') + nuclear(W) + L1(A'-W)"""
