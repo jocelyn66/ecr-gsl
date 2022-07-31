@@ -53,7 +53,7 @@ parser.add_argument('--weight_decay', type=float, default=1e-2)
 # regularization
 parser.add_argument("--beta", type=float, default=0., help="weight of nuclear norm")
 parser.add_argument("--alpha", type=float, default=0., help="weight of L1 norm")
-parser.add_argument("--gamma", type=float, default=0., help="weight of F2 norm")
+parser.add_argument("--gamma", type=float, default=0., help="weight of F norm")
 parser.add_argument("--loss-type", "--loss", type=int, default=0, choices=[0, 1, 2 , 3, 4], 
                     help="type of objective function, 0: no reg, 1: L = CE + nuclear, 2: L = CE + nuclear + L1 + F, 3: L = CE(A,A') + nuclear + L1, 4: L = CE(A,A+H) + nuclear + L1")
 

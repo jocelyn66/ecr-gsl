@@ -152,7 +152,7 @@ def test(model_dir, num=-1, threshold=0.5):
     ######################
 
     # load pretrained model weights
-    model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list)
+    model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
     if args.use_cuda:
         model.cuda()
 

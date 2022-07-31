@@ -174,7 +174,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
         # adj_orig[split] = torch.tensor(dataset.adjacency[split], device=args.device)
         pos_weight[split] = torch.tensor(pos_weight[split], device=args.device)
 
-    model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list)
+    model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
     total = count_params(model)
     logging.info("Total number of parameters {}".format(total))
     model.to(args.device)    # GUP
