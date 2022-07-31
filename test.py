@@ -47,17 +47,21 @@ parser.add_argument('--threshold', type=float, default=0.5)
 
 
 def test(model_dir, num=-1, threshold=0.5):
-    torch.manual_seed(2022)
+    
     # load config
     with open(os.path.join(model_dir, "config.json"), "r") as f:
         config = json.load(f)
     args = argparse.Namespace(**config)
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(2022)
 
     args.use_cuda = torch.cuda.is_available()  # 有无
     # args.use_cuda = False
     if not args.use_cuda:
         ValueError("WARNING: CUDA is not available!!!")  # 用cpu的话, 直接注释
     args.device = torch.device("cuda" if args.use_cuda else "cpu")  # atth
+    torch.cuda.manual_seed(args.seed)
 
     if args.double_precision:
         torch.set_default_dtype(torch.float64)
@@ -157,7 +161,7 @@ def test(model_dir, num=-1, threshold=0.5):
     model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
 
     optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    optimizer = GAEOptimizer(model, optim_method, args.beta, args.n_nodes, norm, pos_weight, args.valid_freq, args.use_cuda)
+    optimizer = GAEOptimizer(args, model, optim_method, norm, pos_weight)
 
     model.eval()
     # eval#############

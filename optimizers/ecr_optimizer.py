@@ -1,4 +1,3 @@
-from turtle import pos
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -6,7 +5,7 @@ from tqdm import tqdm
 import random
 from utils.name2object import *
 
-from torch import nn, nuclear_norm
+from torch import nn
 
 
 # class ECROptimizer(object):
@@ -78,22 +77,23 @@ from torch import nn, nuclear_norm
 
 
 class GAEOptimizer(object):
-    def __init__(self):
-        pass
 
-    def __init__(self, model, optimizer, beta, n_nodes, norm, pos_weight, valid_freq, use_cuda):
+    def __init__(self, args, model, optimizer, norm, pos_weight):
         self.model = model
         self.optimizer = optimizer
-        self.beta = beta
+        self.alpha = args.alpha
+        self.beta = args.beta
+        self.gamma = args.gamma
+
         if self.beta>0:
-            self.loss_fn = self.loss_function_gvae_nuclear_norm if model.gsl_name=='gave' else self.loss_function_gae_nuclear_norm
+            self.loss_fn = self.loss_function_gvae1 if model.gsl_name=='gave' else self.loss_function_gae1
         else:
             self.loss_fn = self.loss_function_gvae if model.gsl_name=='gave' else self.loss_function_gae
         # self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
-        self.use_cuda = use_cuda
+        self.use_cuda = args.use_cuda
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
-        self.valid_freq = valid_freq
-        self.n_nodes = n_nodes
+        self.valid_freq = args.valid_freq
+        self.n_nodes = args.n_nodes
         self.norm = norm
         # self.norm = torch.tensor([norm])
         self.pos_weight = pos_weight
@@ -110,8 +110,8 @@ class GAEOptimizer(object):
             1 + 2 * logvar - mu.pow(2) - logvar.exp().pow(2), 1))
         return cost + KLD
 
-    def loss_function_gvae_nuclear_norm(self, preds, orig, mu, logvar, split='Train'):
-        """GVAE"""
+    def loss_function_gvae1(self, preds, orig, mu, logvar, split='Train'):
+        """L = CE + nuclear_norm"""
         cost = self.norm * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
 
         # see Appendix B from VAE paper:
@@ -120,9 +120,8 @@ class GAEOptimizer(object):
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
         KLD = -0.5 / self.n_nodes * torch.mean(torch.sum(
             1 + 2 * logvar - mu.pow(2) - logvar.exp().pow(2), 1))
-        _, s, _ = torch.svd(preds)
-        nuclear_norm = s.sum()
-        print("nuclear norm/rank = ", nuclear_norm)
+
+        nuclear_norm = torch.linalg.norm(preds, ord='nuc')
         
         return cost + KLD + self.beta * nuclear_norm
 
@@ -137,12 +136,13 @@ class GAEOptimizer(object):
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
         return cost
 
-    def loss_function_gae_nuclear_norm(self, preds, orig, mu, logvar, split='Train'):
-        """GAE"""
+    def loss_function_gae1(self, preds, orig, mu, logvar, split='Train'):
+        """L = CE(A, A') + nuclear_norm(A')"""
         cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
-        _, s, _ = torch.svd(preds)
-        nuclear_norm = s.sum()
-        print("nuclear norm/rank = ", nuclear_norm)
+        # _, s, _ = torch.svd(preds)
+        # nuclear_norm1 = s.sum()
+        nuclear_norm = torch.linalg.norm(preds, ord='nuc')
+        # print("nuclear norm/rank = ", nuclear_norm, nuclear_norm1)  # 有误差
 
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -150,17 +150,34 @@ class GAEOptimizer(object):
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
         return cost + self.beta*nuclear_norm
     
-    def loss_function_gae_nuclear_norm2(self, preds, orig, mu, logvar, split='Train'):
-        """GAE"""
-        cost = torch.linalg.norm(preds-orig)
-        nuclear_norm = torch.linalg.norm(preds, 'nuc')
-        print("nuclear norm/rank = ", nuclear_norm)
+    def loss_function_gae2(self, preds, orig, mu, logvar, split='Train'):
 
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        return cost + self.beta*nuclear_norm
+        """L = CE(A, A') + nuclear(W) + L1(H) + F(A'-W-H)"""
+        cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
+        
+        nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
+        l1_norm = torch.norm(self.model.H, p=1)
+        f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
+
+        return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
+
+    def loss_function_gae3(self, preds, orig, mu, logvar, split='Train'):
+        """L = CE(A,A') + nuclear(W) + L1(A'-W)"""
+        cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
+        
+        nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
+        l1_norm = torch.norm(preds-self.model.W, p=1)
+
+        return cost + self.beta*nuclear_norm + self.alpha * l1_norm
+
+    def loss_function_gae4(self, preds, orig, mu, logvar, split='Train'):
+        """L = CE(A,W+H) + nuclear(W) + L1(H)"""
+        cost = self.norm[split] * F.binary_cross_entropy_with_logits(self.model.W+self.model.H, orig, pos_weight=self.pos_weight[split])
+        
+        nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
+        l1_norm = torch.norm(self.model.H, p=1)
+
+        return cost + self.beta*nuclear_norm + self.alpha * l1_norm
 
     def epoch(self, dataset, adj, orig):
         adj_ = torch.tensor(adj, device=self.device)

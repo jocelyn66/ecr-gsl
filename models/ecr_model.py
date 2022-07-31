@@ -1,4 +1,5 @@
 from json import encoder
+from importlib_metadata import requires
 import torch
 import torch.nn as nn
 from utils.name2object import name2gsl, name2init
@@ -8,7 +9,7 @@ import tqdm
 
 class ECRModel(nn.Module):
 
-    def __init__(self, args, tokenizer, plm_model, schema_list):
+    def __init__(self, args, tokenizer, plm_model, schema_list, orig_adj=None):
         super(ECRModel, self).__init__()
 
         # bert
@@ -21,6 +22,18 @@ class ECRModel(nn.Module):
         self.gsl = getattr(gsls, name2gsl[args.encoder])(args.feat_dim, args.hidden1, args.hidden2, args.dropout)
         self.gsl_name = args.encoder
         self.device = args.device
+
+        # regularization
+        self.loss_type = args.loss_type
+        if self.loss_type in [2,3,4]:
+            self.W = nn.Parameter(orig_adj / 2, requires_grad=True)
+            # self.W = nn.Parameter(torch.Tensor((args.n_nodes['Train'], args.n_nodes['Train']), requires_grad=True))
+            # torch.nn.init.xavier_uniform_(self.W)
+
+        if self.loss_type in [2, 4]:
+            self.H = nn.Parameter(orig_adj / 2, requires_grad=True)
+            # self.H = nn.Parameter(torch.Tensor((args.n_nodes['Train'], args.n_nodes['Train']), requires_grad=True))
+            # torch.nn.init.xavier_uniform_(self.H)
 
     def forward(self, dataset, adj):
         # features: (feat_dim, n_nodes)

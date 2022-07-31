@@ -179,11 +179,12 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
     logging.info("Total number of parameters {}".format(total))
     model.to(args.device)    # GUP
 
+    assert args.encoder != 'gvae'
     optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    regularizer = None
-    if args.regularizer:
-        regularizer = getattr(regularizers, args.regularizer)(args.reg)
-    optimizer = GAEOptimizer(model, optim_method, args.beta, args.n_nodes, norm, pos_weight, args.valid_freq, use_cuda)
+    # regularizer = None
+    # if args.regularizer:
+    #     regularizer = getattr(regularizers, args.regularizer)(args.reg)
+    optimizer = GAEOptimizer(args, model, optim_method, norm, pos_weight)
 
     # start train######################################
     counter = 0
@@ -275,7 +276,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
         # ###################
 
         if (epoch+1) % args.save_freq == 0:
-            model_path = os.path.join(save_dir, model_name+str(epoch+1))
+            model_path = os.path.join(save_dir, str(epoch+1)+model_name)
             torch.save(model.cpu().state_dict(), model_path)
             model.to(args.device)
 
