@@ -154,11 +154,11 @@ class GAEOptimizer(object):
         
         nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
         l1_norm = torch.norm(self.model.H, p=1)
-        print("####@optim", self.model.W)
-        # f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
+        # print("####@optim", self.model.W)
+        f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
 
-        # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
-        return cost + self.beta*nuclear_norm + self.alpha * l1_norm
+        return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
+        # return cost + self.beta*nuclear_norm + self.alpha * l1_norm
 
     def loss_function_gae3(self, preds, orig, mu, logvar, split='Train'):
         """L = CE(A,A') + nuclear(W) + L1(A'-W)"""
