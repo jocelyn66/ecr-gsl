@@ -6,6 +6,7 @@ import time
 
 import torch.optim
 import math
+import itertools
 
 import models.ecr_model
 import optimizers.regularizers as regularizers
@@ -13,6 +14,7 @@ from optimizers.ecr_optimizer import *
 from config import parser
 from utils.name2object import name2model
 from rs_hyperparameter import rs_tunes, rs_hp_range, rs_set_hp_func
+from gs_hyperparameter import gs_tunes, gs_hp_range, gs_set_hp_func
 from utils.train import *
 from utils.evaluate import *
 from utils.visual import *
@@ -31,7 +33,7 @@ from transformers import (
 
 
 def set_logger(args):
-    save_dir = get_savedir(args.dataset, args.model, args.encoder, args.decoder, args.rand_search)
+    save_dir = get_savedir(args.dataset, args.model, args.encoder, args.decoder, args.rand_search or args.grid_search)
     logging.basicConfig(
         format="%(asctime)s %(levelname)-8s %(message)s",
         level=logging.INFO,
@@ -56,10 +58,10 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
     np.random.seed(args.seed)
     torch.manual_seed(2022)
 
-    if args.rand_search:
+    if args.rand_search or args.grid_search:
         set_hp(args, hps)
 
-    if not args.rand_search:
+    if not (args.rand_search or args.grid_search):
         save_dir = set_logger(args)
         with open(os.path.join(save_dir, "config.json"), 'a') as fjson:
             json.dump(vars(args), fjson)
@@ -314,7 +316,6 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
 
 
 def rand_search(args):
-    pass
 
     best_f1 = 0
     best_hps = []
@@ -354,12 +355,55 @@ def rand_search(args):
     # logging.info("best hyperparameters: {}".format(best_hps))
 
 
+def grid_search(args):
+
+    best_f1 = 0
+    best_hps = []
+    best_f1s = []
+
+    save_dir = set_logger(args)
+    logging.info("** Grid Search **")
+
+    args.tune = gs_tunes
+    logging.info(gs_hp_range)
+    hyperparams = args.tune.split(',')
+
+    if args.tune == '' or len(hyperparams) < 1:
+        logging.info("No hyperparameter specified.")
+        sys.exit(0)
+    grid = gs_hp_range[hyperparams[0]]
+    for hp in hyperparams[1:]:
+        grid = itertools.product(grid, gs_hp_range[hp])
+
+    grid = list(grid)
+    logging.info('* {} hyperparameter combinations to try'.format(len(grid)))
+
+    for i, grid_entry in enumerate(list(grid)):
+        if not (type(grid_entry) is list):
+            grid_entry = [grid_entry]
+        grid_entry = flatten(grid_entry)    # list
+        hp_values = dict(zip(hyperparams, grid_entry))
+        logging.info('* Hyperparameter Set {}:'.format(i))
+        logging.info(hp_values)
+
+        test_metrics = train(args, hp_values, gs_set_hp_func, save_dir, i)
+        logging.info('{} done'.format(grid_entry))
+    #     if test_metrics['F'] > best_f1:
+    #         best_f1 = test_metrics['F']
+    #         best_f1s.append(best_f1)
+    #         best_hps.append(grid_entry)
+    # logging.info("best hyperparameters: {}".format(best_hps))
+
+
 if __name__ == "__main__":
     start = datetime.datetime.now()
     if parser.rand_search:
         rand_search(parser)
     else:
-        train(parser)
+        if parser.grid_search:
+            grid_search(parser)
+        else:
+            train(parser)
     end = datetime.datetime.now()
     logging.info('total runtime: %s' % str(end - start))
     sys.exit()

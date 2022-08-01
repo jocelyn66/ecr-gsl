@@ -34,7 +34,6 @@ class ECRModel(nn.Module):
             # torch.nn.init.xavier_uniform_(self.H)
 
     def forward(self, dataset, adj):
-        # features: (feat_dim, n_nodes)
         # 待优化
         features = []  # ts list
 

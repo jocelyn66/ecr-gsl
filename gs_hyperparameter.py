@@ -3,19 +3,19 @@ from config import parser
 
 np.random.seed(parser.seed)
 
-search_size = 9
-rs_tunes = 'learning_rate,rand_node_rate,beta,alpha,gamma'
+# search_size = 9
+gs_tunes = 'learning_rate,rand_node_rate,beta,alpha,gamma'
 
 # hps_dropout = [0] * 14
-hps_lr = [0.00001] * search_size    # [0.00001, 0.00003, 0.00005]
+hps_lr = [0.00001]    # [0.00001, 0.00003, 0.00005]
 # hps_lr = np.random.rand(search_size) * 0.004 + 0.001    # [0.001, 0.005]
 # hps_lr = np.random.rand(search_size)*3-5
 # hps_lr = np.power(10, hps_lr)   
-hps_rand_node_rate = [0.5] * search_size
+hps_rand_node_rate = [0.5]
 # hps_encoder = ['gae', 'gvae'] * 10
 hps_beta = [0.0001, 0.00001, 0.000001]
-hps_alpha = [None] #[0.001, 0.0001, 0.00001, 0.000001]
-hps_gamma = [None] #[0.0001, 0.00001, 0.000001]
+hps_alpha = [0.001, 0.0001, 0.00001, 0.000001]
+hps_gamma = [None]
 # hps_beta = np.random.rand(search_size)*3-7
 # hps_beta = np.power(10, hps_beta)
 # hps_alpha = np.random.rand(search_size)*4-7
@@ -24,7 +24,7 @@ hps_gamma = [None] #[0.0001, 0.00001, 0.000001]
 # hps_gamma = np.power(10, hps_beta)
 
 
-rs_hp_range = {
+gs_hp_range = {
     # "dropout": hps_dropout,
     "learning_rate": hps_lr,
     "rand_node_rate": hps_rand_node_rate,
@@ -35,10 +35,11 @@ rs_hp_range = {
 }
 
 
-def rs_set_hp_func(args, hp_values):
-    hyperparams = rs_tunes.split(',')
+def gs_set_hp_func(args, hp_values):
+    hyperparams = gs_tunes.split(',')
     for hp in hyperparams:
-        if hp_values[hp] is None: continue
+        if hp_values[hp] is None:
+            continue
         if hp == 'dropout':
             args.dropout = hp_values[hp]
         if hp == 'learning_rate':

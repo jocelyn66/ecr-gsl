@@ -60,6 +60,8 @@ parser.add_argument("--loss-type", "--loss", type=int, default=0, choices=[0, 1,
 # configuration for optimal parameters
 parser.add_argument("--rand-search", "--rs", action='store_true',
                     help="perform random search for best configuration")
+parser.add_argument("--grid-search", "--gs", action='store_true',
+                    help="perform grid search for best configuration")
 # mdoel config
 parser.add_argument("--model", default="ecr-gsl",
                     help="ECR models")
