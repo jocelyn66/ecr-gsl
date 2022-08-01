@@ -18,7 +18,6 @@ from utils.evaluate import *
 from utils.visual import *
 from dataset.dataset_process import preprocess_function
 
-
 from dataset.graph_dataset import GDataset, get_examples_indices
 from datasets import load_dataset
 
@@ -305,7 +304,8 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
     model_path = os.path.join(save_dir, model_name)
     torch.save(model.cpu().state_dict(), model_path)
 
-    plot(save_dir, num, losses['Train'], losses['Dev'], losses['Test'])
+    # plot(save_dir, num, losses['Train'], losses['Dev'], losses['Test'])
+    plot1(save_dir, num, losses['Train'])
 
     end_model = datetime.datetime.now()
     logging.info('this model runtime: %s' % str(end_model - start_model))

@@ -1,5 +1,3 @@
-from hashlib import new
-from turtle import color
 import matplotlib.pyplot as plt
 import os
 
@@ -37,6 +35,25 @@ def plot(path, num, train_loss, dev_loss, test_loss):
     plt.pause(10)
     plt.close(fig)
     
+def plot1(path, num, train_loss):
+    
+    dir = os.path.join(path, 'converg') + str(num)
+
+    fig, ax = plt.subplots(1,1,dpi=100, figsize=(12,18))
+    epoch = list(range(len(train_loss)))
+    ax[0].plot(epoch, train_loss, label='Train', color='#4472C4')
+    ax[0].legend(loc='best')
+    # ax.set_title(name)
+    # plt.grid(b=True, axis='y')
+
+    # ax.grid(True)
+    fig.tight_layout()
+
+    # plt.imshow()
+    plt.savefig(dir, bbox_inches='tight')
+
+    plt.pause(10)
+    plt.close(fig)
 
 def plot_adj(path, descrip, adj, num=-1, weighted=False):  # 画adj
 

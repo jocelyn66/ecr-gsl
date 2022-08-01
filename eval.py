@@ -1,7 +1,5 @@
-import imp
 import numpy as np
 import os
-import subprocess
 
 
 def read_conll_f1(filename):

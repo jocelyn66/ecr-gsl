@@ -1,5 +1,3 @@
-from json import encoder
-from importlib_metadata import requires
 import torch
 import torch.nn as nn
 from utils.name2object import name2gsl, name2init
@@ -27,18 +25,19 @@ class ECRModel(nn.Module):
         self.loss_type = args.loss_type
         if self.loss_type in [2,3,4]:
             self.W = nn.Parameter(torch.tensor(orig_adj / 2), requires_grad=True)
-            # self.W = nn.Parameter(torch.Tensor((args.n_nodes['Train'], args.n_nodes['Train']), requires_grad=True))
+            # self.W = nn.Parameter(torch.Tensor(args.n_nodes['Train'], args.n_nodes['Train']), requires_grad=True)
             # torch.nn.init.xavier_uniform_(self.W)
 
         if self.loss_type in [2, 4]:
             self.H = nn.Parameter(torch.tensor(orig_adj / 2), requires_grad=True)
-            # self.H = nn.Parameter(torch.Tensor((args.n_nodes['Train'], args.n_nodes['Train']), requires_grad=True))
+            # self.H = nn.Parameter(torch.Tensor(args.n_nodes['Train'], args.n_nodes['Train']), requires_grad=True)
             # torch.nn.init.xavier_uniform_(self.H)
 
     def forward(self, dataset, adj):
         # features: (feat_dim, n_nodes)
         # 待优化
         features = []  # ts list
+        print("####@model", self.W)
 
         # 遍历句子构造句子子图, 同时记录句子文档id
         for _, sent in enumerate(dataset):

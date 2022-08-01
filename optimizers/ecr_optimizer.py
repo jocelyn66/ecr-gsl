@@ -154,6 +154,7 @@ class GAEOptimizer(object):
         
         nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
         l1_norm = torch.norm(self.model.H, p=1)
+        print("####@optim", self.model.W)
         # f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
 
         # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
@@ -195,6 +196,7 @@ class GAEOptimizer(object):
 
         with torch.no_grad():
             recovered, mu, logvar = self.model(dataset, adj_)
-            loss = self.loss_fn(preds=recovered, orig=orig_, mu=mu, logvar=logvar, split=split)
+            # loss = self.loss_fn(preds=recovered, orig=orig_, mu=mu, logvar=logvar, split=split)
 
-        return loss.item(), mu
+        # return loss.item(), mu
+        return 0, mu

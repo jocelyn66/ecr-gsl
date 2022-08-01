@@ -1,12 +1,8 @@
-from __future__ import print_function
-from cmath import sqrt
 import itertools
-from unicodedata import numeric
 import numpy as np
 import json
 
 import numpy as np
-from pyparsing import nums
 from utils.train import add_new_item
 
 DATA_PATH = './data/'
