@@ -3,8 +3,8 @@ from config import parser
 
 np.random.seed(parser.seed)
 
-search_size = 9
-rs_tunes = 'learning_rate,rand_node_rate,beta'
+search_size = 20
+rs_tunes = 'learning_rate,rand_node_rate,beta,alpha,gamma'
 
 # hps_dropout = [0] * 14
 hps_lr = [0.00001] * search_size    # [0.00001, 0.00003, 0.00005]
@@ -13,11 +13,15 @@ hps_lr = [0.00001] * search_size    # [0.00001, 0.00003, 0.00005]
 # hps_lr = np.power(10, hps_lr)   
 hps_rand_node_rate = [0.5] * search_size
 # hps_encoder = ['gae', 'gvae'] * 10
-# hps_beta = np.random.rand(search_size)*8-7
-hps_beta = [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]
-# hps_beta = np.power(10, hps_beta)
+# hps_beta = [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]
 # hps_alpha = [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]
 # hps_gamma = [0.0000001, 0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]
+hps_beta = np.random.rand(search_size)*3-7
+hps_beta = np.power(10, hps_beta)
+hps_alpha = np.random.rand(search_size)*4-7
+hps_alpha = np.power(10, hps_beta)
+hps_gamma = np.random.rand(search_size)*8-7
+hps_gamma = np.power(10, hps_beta)
 
 
 rs_hp_range = {
@@ -25,8 +29,8 @@ rs_hp_range = {
     "learning_rate": hps_lr,
     "rand_node_rate": hps_rand_node_rate,
     "beta": hps_beta,
-    # "alpha": hps_alpha,
-    # "gamma": hps_gamma,
+    "alpha": hps_alpha,
+    "gamma": hps_gamma,
     # "encoder": hps_encoder
 }
 

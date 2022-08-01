@@ -41,8 +41,8 @@ def plot1(path, num, train_loss):
 
     fig, ax = plt.subplots(1,1,dpi=100, figsize=(12,18))
     epoch = list(range(len(train_loss)))
-    ax[0].plot(epoch, train_loss, label='Train', color='#4472C4')
-    ax[0].legend(loc='best')
+    ax.plot(epoch, train_loss, label='Train', color='#4472C4')
+    ax.legend(loc='best')
     # ax.set_title(name)
     # plt.grid(b=True, axis='y')
 
