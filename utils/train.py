@@ -96,11 +96,23 @@ def add_new_item(dict, item, idx):
 
 
 def preprocess_adjacency(adj):
+    # in: np.array
     rowsum = np.array(adj.sum(1))
     degree_mat_inv_sqrt = np.diag(np.power(rowsum, -0.5))
     adj_normalized = adj.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt)
     return adj_normalized
 
+
+def normalize_matrix(adj):
+    # in: tensor
+    adj_ = adj.to(float)
+    rowsum = adj_.sum(axis=1)
+    degree_mat_inv_sqrt = torch.diag(torch.power(rowsum, -0.5))
+    adj_normalized = (adj_ @ degree_mat_inv_sqrt).T @ degree_mat_inv_sqrt
+    return adj_normalized
+
+def get_norm_of_matrix(adj):
+    return adj.shape[0] * adj.shape[0] / float((adj.shape[0] * adj.shape[0] - adj.sum()) * 2)
 
 def sigmoid(x):
         return 1 / (1 + np.exp(-x))

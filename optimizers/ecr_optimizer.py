@@ -6,6 +6,7 @@ import random
 from utils.name2object import *
 
 from torch import nn
+from utils.train import get_norm_of_matrix, normalize_matrix
 
 
 # class ECROptimizer(object):
@@ -148,17 +149,23 @@ class GAEOptimizer(object):
         return cost + self.beta*nuclear_norm
     
     def loss_function_gae2(self, preds, orig, mu, logvar, split='Train'):
-
+        # 1. H W做归一化 2. 乘norm系数?
         """L = CE(A, A') + nuclear(W) + L1(H) + F(A'-W-H)"""
         cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
         
+        # H_norm = get_normed_matrix(self.model.H)
+        # W_norm = get_normed_matrix(self.model.W)
+
+        norm_H = get_norm_of_matrix(self.model.H)
+        norm_W = get_norm_of_matrix(self.model.W)
+        norm_D = get_norm_of_matrix(preds-self.model.W-self.model.H)
+
         nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
         l1_norm = torch.norm(self.model.H, p=1)
-        # print("####@optim", self.model.W)
         f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
 
-        return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
-        # return cost + self.beta*nuclear_norm + self.alpha * l1_norm
+        # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
+        return cost + norm_H * self.beta*nuclear_norm + norm_W * self.alpha * l1_norm + norm_D * self.gamma * f_norm
 
     def loss_function_gae3(self, preds, orig, mu, logvar, split='Train'):
         """L = CE(A,A') + nuclear(W) + L1(A'-W)"""
@@ -179,6 +186,7 @@ class GAEOptimizer(object):
         return cost + self.beta*nuclear_norm + self.alpha * l1_norm
 
     def epoch(self, dataset, adj, orig):
+        # adj: adj_norm
         adj_ = torch.tensor(adj, device=self.device)
         orig_ = torch.tensor(orig, device=self.device)
         recovered, mu, logvar = self.model(dataset, adj_)
@@ -187,6 +195,9 @@ class GAEOptimizer(object):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+
+        print("W.grad:", torch.min(self.model.W.grad), torch.max(self.model.W.grad), self.model.W.grad)
+        print("H.grad:", torch.min(self.model.H.grad), torch.max(self.model.H.grad),self.model.H.grad)
 
         return loss.item(), mu
 
