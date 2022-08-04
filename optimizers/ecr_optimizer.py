@@ -6,7 +6,7 @@ import random
 from utils.name2object import *
 
 from torch import nn
-from utils.train import get_norm_of_matrix, normalize_matrix
+from utils.train import get_norm_of_matrix, normalize_adjacency
 
 
 # class ECROptimizer(object):
@@ -149,23 +149,72 @@ class GAEOptimizer(object):
         return cost + self.beta*nuclear_norm
     
     def loss_function_gae2(self, preds, orig, mu, logvar, split='Train'):
-        # 1. H W做归一化 2. 乘norm系数?
+        # 1. H W: 对称, 归一化
         """L = CE(A, A') + nuclear(W) + L1(H) + F(A'-W-H)"""
         cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
         
-        # H_norm = get_normed_matrix(self.model.H)
-        # W_norm = get_normed_matrix(self.model.W)
+        # W = self.model.W @ self.model.W.T
+        # H = self.model.H @ self.model.H.T
+        W = self.model.W
+        H = self.model.H
+        H_norm = normalize_adjacency(H)
+        W_norm = normalize_adjacency(W)
+        D_norm = normalize_adjacency(preds-W-H)
 
-        norm_H = get_norm_of_matrix(self.model.H)
-        norm_W = get_norm_of_matrix(self.model.W)
-        norm_D = get_norm_of_matrix(preds-self.model.W-self.model.H)
+        # norm_W = get_norm_of_matrix(self.model.W)
+        # norm_H = get_norm_of_matrix(self.model.H)
+        # norm_D = get_norm_of_matrix(preds-self.model.W-self.model.H)
 
-        nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
-        l1_norm = torch.norm(self.model.H, p=1)
-        f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
+        nuclear_norm = torch.linalg.norm(W_norm, 'nuc')
+        l1_norm = torch.norm(H_norm, p=1)
+        f_norm = torch.linalg.norm(D_norm)
+        
+        # _, s, _ = torch.svd(W_norm)
+        # nuclear_norm1 = s.sum()
+
+        w = self.beta * nuclear_norm
+        h = self.alpha * l1_norm
+        d = self.gamma * f_norm
+        print("norms:", nuclear_norm, l1_norm, f_norm)
+
+        print("results: ", w, h, d)
 
         # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
-        return cost + norm_H * self.beta*nuclear_norm + norm_W * self.alpha * l1_norm + norm_D * self.gamma * f_norm
+        return cost + w + h + d
+
+    # def loss_function_gae2(self, preds, orig, mu, logvar, split='Train'):
+    #     # 乘norm系数
+    #     """L = CE(A, A') + nuclear(W) + L1(H) + F(A'-W-H)"""
+    #     cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
+        
+    #     # H_norm = get_normed_matrix(self.model.H)
+    #     # W_norm = get_normed_matrix(self.model.W)
+
+    #     norm_W = get_norm_of_matrix(self.model.W)
+    #     norm_H = get_norm_of_matrix(self.model.H)
+    #     norm_D = get_norm_of_matrix(preds-self.model.W-self.model.H)
+
+    #     print(norm_W, norm_H, norm_D)
+
+    #     _, s, _ = torch.svd(self.model.W)
+    #     nuclear_norm1 = s.sum()
+
+    #     nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
+        
+    #     l1_norm = torch.norm(self.model.H, p=1)
+    #     f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
+
+    #     w = norm_W * self.beta*nuclear_norm
+    #     h = norm_H * self.alpha * l1_norm
+    #     d = norm_D * self.gamma * f_norm
+    #     print(nuclear_norm, "=", nuclear_norm1, l1_norm, f_norm)
+
+    #     print("nuclear norm:", w)
+    #     print("l1 norm", h)
+    #     print("f norm", d)
+
+    #     # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
+    #     return cost + h + w + d
 
     def loss_function_gae3(self, preds, orig, mu, logvar, split='Train'):
         """L = CE(A,A') + nuclear(W) + L1(A'-W)"""

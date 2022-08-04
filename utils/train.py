@@ -102,13 +102,16 @@ def preprocess_adjacency(adj):
     adj_normalized = adj.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt)
     return adj_normalized
 
-
-def normalize_matrix(adj):
+def normalize_adjacency(adj):
     # in: tensor
-    adj_ = adj.to(float)
-    rowsum = adj_.sum(axis=1)
-    degree_mat_inv_sqrt = torch.diag(torch.power(rowsum, -0.5))
-    adj_normalized = (adj_ @ degree_mat_inv_sqrt).T @ degree_mat_inv_sqrt
+    # A/(rowsum)
+    # 无对称constraint
+    # adj_ = adj.to(float)
+    # rowsum = torch.sum(adj, axis=1, keepdim=True)
+    rowsum = adj.sum(axis=1)
+    assert(all(rowsum))
+    degree_mat_inv_sqrt = torch.diag(rowsum**(-0.5))
+    adj_normalized = (adj @ degree_mat_inv_sqrt).T @ degree_mat_inv_sqrt
     return adj_normalized
 
 def get_norm_of_matrix(adj):
