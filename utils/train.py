@@ -104,12 +104,16 @@ def preprocess_adjacency(adj):
 
 def normalize_adjacency(adj):
     # in: tensor
-    # A/(rowsum)
-    # 无对称constraint
-    # adj_ = adj.to(float)
     # rowsum = torch.sum(adj, axis=1, keepdim=True)
+    assert adj.equal(adj.T)  #对称constraint
+    assert adj.min()>=0  #非负constraint
+
     rowsum = adj.sum(axis=1)
-    assert(all(rowsum))
+    if any(rowsum<1e-6):
+        print(rowsum.min())
+    # assert all(rowsum>1e-6)
+    # rowsum = torch.where(rowsum<1e-6, 1, rowsum)
+    rowsum[rowsum==0] = 1
     degree_mat_inv_sqrt = torch.diag(rowsum**(-0.5))
     adj_normalized = (adj @ degree_mat_inv_sqrt).T @ degree_mat_inv_sqrt
     return adj_normalized

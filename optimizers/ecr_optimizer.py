@@ -153,13 +153,15 @@ class GAEOptimizer(object):
         """L = CE(A, A') + nuclear(W) + L1(H) + F(A'-W-H)"""
         cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
         
-        # W = self.model.W @ self.model.W.T
-        # H = self.model.H @ self.model.H.T
-        W = self.model.W
-        H = self.model.H
+        W = (self.model.W + self.model.W.T)/2  #对称constraint
+        W[W<0] = 0
+        H = (self.model.H + self.model.H.T)/2
+        H[H<0] = 0
+        D = preds - W - H
+        D[D<0] = 0
         H_norm = normalize_adjacency(H)
         W_norm = normalize_adjacency(W)
-        D_norm = normalize_adjacency(preds-W-H)
+        D_norm = normalize_adjacency(D)
 
         # norm_W = get_norm_of_matrix(self.model.W)
         # norm_H = get_norm_of_matrix(self.model.H)
@@ -245,8 +247,8 @@ class GAEOptimizer(object):
         loss.backward()
         self.optimizer.step()
 
-        print("W.grad:", torch.min(self.model.W.grad), torch.max(self.model.W.grad), self.model.W.grad)
-        print("H.grad:", torch.min(self.model.H.grad), torch.max(self.model.H.grad),self.model.H.grad)
+        print("W.grad:", torch.min(self.model.W.grad), torch.max(self.model.W.grad))
+        print("H.grad:", torch.min(self.model.H.grad), torch.max(self.model.H.grad))
 
         return loss.item(), mu
 
@@ -257,6 +259,5 @@ class GAEOptimizer(object):
         with torch.no_grad():
             recovered, mu, logvar = self.model(dataset, adj_)
             # loss = self.loss_fn(preds=recovered, orig=orig_, mu=mu, logvar=logvar, split=split)
-
         # return loss.item(), mu
         return 0, mu
