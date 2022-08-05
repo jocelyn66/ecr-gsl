@@ -72,6 +72,8 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
     if args.double_precision:
         torch.set_default_dtype(torch.float64)
         print("double precision")
+    else:
+        torch.set_default_dtype(torch.float32)
 
     # dataset###############
     dataset = GDataset(args)

@@ -27,8 +27,8 @@ class ECRModel(nn.Module):
         self.loss_type = args.loss_type
         if self.loss_type in [2,3,4]:
 
-            init_adj = orig_adj / 2
-            # init_adj = self.eye_init(args.n_nodes['Train'])
+            # init_adj = orig_adj / 2
+            init_adj = self.eye_init(args.n_nodes['Train'])
             # init_adj = self.rand_init(args.n_nodes['Train'])
 
             init_adj = preprocess_adjacency(init_adj)
@@ -39,8 +39,8 @@ class ECRModel(nn.Module):
 
         if self.loss_type in [2, 4]:
 
-            init_adj = orig_adj / 2
-            # init_adj = self.eye_init(args.n_nodes['Train'])
+            # init_adj = orig_adj / 2
+            init_adj = self.eye_init(args.n_nodes['Train'])
             # init_adj = self.rand_init(args.n_nodes['Train'])
 
             init_adj = preprocess_adjacency(init_adj)

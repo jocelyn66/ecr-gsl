@@ -157,11 +157,13 @@ class GAEOptimizer(object):
         W[W<0] = 0
         H = (self.model.H + self.model.H.T)/2
         H[H<0] = 0
-        D = preds - W - H
-        D[D<0] = 0
+        # D[D<0] = 0
         H_norm = normalize_adjacency(H)
         W_norm = normalize_adjacency(W)
-        D_norm = normalize_adjacency(D)
+        # D_norm = normalize_adjacency(D)
+
+        # D = preds - W_norm - H_norm  #?
+        D = preds - W - H
 
         # norm_W = get_norm_of_matrix(self.model.W)
         # norm_H = get_norm_of_matrix(self.model.H)
@@ -169,7 +171,7 @@ class GAEOptimizer(object):
 
         nuclear_norm = torch.linalg.norm(W_norm, 'nuc')
         l1_norm = torch.norm(H_norm, p=1)
-        f_norm = torch.linalg.norm(D_norm)
+        f_norm = torch.linalg.norm(D)
         
         # _, s, _ = torch.svd(W_norm)
         # nuclear_norm1 = s.sum()
@@ -180,7 +182,7 @@ class GAEOptimizer(object):
         print("norms:", nuclear_norm, l1_norm, f_norm)
 
         print("results: ", w, h, d)
-
+        print("cost:", cost)
         # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
         return cost + w + h + d
 
@@ -222,19 +224,45 @@ class GAEOptimizer(object):
         """L = CE(A,A') + nuclear(W) + L1(A'-W)"""
         cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
         
-        nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
-        l1_norm = torch.norm(preds-self.model.W, p=1)
+        W = (self.model.W + self.model.W.T)/2
+        W[W<0] = 0
+        W_norm = normalize_adjacency(W)
+        D = preds - W
+        D[D<0] = 0
+        D_norm = normalize_adjacency(D)
 
-        return cost + self.beta*nuclear_norm + self.alpha * l1_norm
+        nuclear_norm = torch.linalg.norm(W_norm, 'nuc')
+        l1_norm = torch.norm(D_norm, p=1)
+        print("norms:", nuclear_norm, l1_norm)
+
+        w = self.beta*nuclear_norm
+        h = self.alpha*l1_norm
+        print("results:", w, h)
+
+        return cost + w + h
 
     def loss_function_gae4(self, preds, orig, mu, logvar, split='Train'):
         """L = CE(A,W+H) + nuclear(W) + L1(H)"""
-        cost = self.norm[split] * F.binary_cross_entropy_with_logits(self.model.W+self.model.H, orig, pos_weight=self.pos_weight[split])
         
-        nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
-        l1_norm = torch.norm(self.model.H, p=1)
+        W = (self.model.W + self.model.W.T)/2  #对称constraint
+        W[W<0] = 0
+        W_norm = normalize_adjacency(W)
 
-        return cost + self.beta*nuclear_norm + self.alpha * l1_norm
+        H = (self.model.H + self.model.H.T)/2
+        H[H<0] = 0
+        H_norm = normalize_adjacency(H)
+
+        nuclear_norm = torch.linalg.norm(W_norm, 'nuc')
+        l1_norm = torch.norm(H_norm, p=1)
+        print("norms:", nuclear_norm, l1_norm)
+
+        w = self.beta * nuclear_norm
+        h = self.alpha * l1_norm
+        print("results:", w, h)
+
+        cost = self.norm[split] * F.binary_cross_entropy_with_logits(W + H, orig, pos_weight=self.pos_weight[split])
+        print("cost:", cost)
+        return cost + w + h
 
     def epoch(self, dataset, adj, orig):
         # adj: adj_norm

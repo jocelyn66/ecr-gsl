@@ -105,8 +105,9 @@ class GDataset(object):
 
         # constraint: 对称，对角线0
         adj = np.where((adj + adj.T)>0, 1., 0.)
+        adj[np.diag_indices_from(adj)] = 1
         adj[np.diag_indices_from(adj)] = 0
-        assert(adj.diagonal(offset=0, axis1=0, axis2=1).all()==0)
+        # assert(adj.diagonal(offset=0, axis1=0, axis2=1).all()==0)
 
         return adj
         
