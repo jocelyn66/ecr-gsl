@@ -1,132 +1,66 @@
 import numpy as np
-from sklearn.metrics import label_ranking_loss, roc_auc_score, average_precision_score, f1_score, precision_score, recall_score
-from utils.train import sigmoid
-from utils.visual import *
+import os
 
 
-def format_metrics(metrics, split):
-    # f_score, roc_score, ap_score, p, r
-    str = 'AUC={:.5f}, AP={:.5f}'.format(metrics[0], metrics[1])
-    return str
+def read_conll_f1(filename):
+    '''
+    This function reads the results of the CoNLL scorer , extracts the F1 measures of the MUS,
+    B-cubed and the CEAF-e and calculates CoNLL F1 score.
+    :param filename: a file stores the scorer's results.
+    :return: the CoNLL F1
+    '''
+    f1_list = []
+    with open(filename, "r") as ins:
+        for line in ins:
+            new_line = line.strip()
+            if new_line.find('F1:') != -1:
+                f1_list.append(float(new_line.split(': ')[-1][:-1]))
+
+    muc_f1 = f1_list[1]
+    bcued_f1 = f1_list[3]
+    ceafe_f1 = f1_list[7]
+
+    return {'MUC': muc_f1, 'B3': bcued_f1, 'CEAFe':ceafe_f1, 'CoNLL F1': (muc_f1 + bcued_f1 + ceafe_f1)/float(3)}
 
 
-# cluster####################
-def mult_precision(el1, el2, cdict, ldict):
-    """Computes the multiplicity precision for two elements."""
-    return min(len(cdict[el1] & cdict[el2]), len(ldict[el1] & ldict[el2])) \
-        / float(len(cdict[el1] & cdict[el2]))
+def run_conll_scorer(args):
+    # file
+    event_response_filename = os.path.join(args.out_dir, 'CD_test_event_mention_based.response_conll')
+    event_response_filename = os.path.join(args.out_dir, 'CD_test_event_span_based.response_conll')
 
+    event_conll_file = os.path.join(args.out_dir,'event_scorer_cd_out.txt')
 
-def mult_recall(el1, el2, cdict, ldict):
-    """Computes the multiplicity recall for two elements."""
-    return min(len(cdict[el1] & cdict[el2]), len(ldict[el1] & ldict[el2])) \
-        / float(len(ldict[el1] & ldict[el2]))
-        
+    # command and process
+    event_scorer_command = ('perl scorer/scorer.pl all {} {} none > {} \n'.format
+        (args.event_gold_file_path, event_response_filename, event_conll_file))
 
-def precision(cdict, ldict):
-    """Computes overall extended BCubed precision for the C and L dicts."""
-    return np.mean([np.mean([mult_precision(el1, el2, cdict, ldict) \
-        for el2 in cdict if cdict[el1] & cdict[el2]]) for el1 in cdict])
+    processes = []
+    print('Run scorer command for cross-document event coreference')
+    processes.append(subprocess.Popen(event_scorer_command, shell=True))
 
+    while processes:
+        status = processes[0].poll()
+        if status is not None:
+            processes.pop(0)
 
-def recall(cdict, ldict):
-    """Computes overall extended BCubed recall for the C and L dicts."""
-    return np.mean([np.mean([mult_recall(el1, el2, cdict, ldict) \
-        for el2 in cdict if ldict[el1] & ldict[el2]]) for el1 in cdict])
+    print ('Running scorers has been done.')
+    print ('Save results...')
 
+    # write from conll file to txt file
+    scores_file = open(os.path.join(args.out_dir, 'conll_f1_scores.txt'), 'w')
 
-def fscore(p_val, r_val, beta=1.0):
-    """Computes the F_{beta}-score of given precision and recall values."""
-    return (1.0 + beta**2) * (p_val * r_val / (beta**2 * p_val + r_val))   
+    event_f1 = read_conll_f1(event_conll_file)
+    format_f1 = format_metrics(event_f1)
+    scores_file.write('Event F1: {}\n'.format(format_f1))
 
+    scores_file.close()
 
-def bcubed(gold_lst, predicted_lst):
-    # in: gold_list: cluster set
-    """
-    Takes gold, predicted.
-    Returns recall, precision, f1score
-    """
-    gold = {i:{cluster} for i,cluster in enumerate(gold_lst)}
-    pred = {i:{cluster} for i,cluster in enumerate(predicted_lst)}
-    p = precision(pred, gold)
-    r = recall(pred, gold)
-    return r, p, fscore(p, r)
-    
-###################################
+    return format_f1
 
-
-def get_bcubed(labels, preds):
-    return f1_score(labels, preds)
-
-
-def test_model(emb, indices, true_indices, false_indices):
-    # target_adj: 
-
-    # 根据共指关系计算AUC等
-    # 大矩阵: embedding, 共指关系矩阵
-    # event mention在大矩阵中的下标,用于提取正负例,方法 取上三角矩阵(不含对角线)
-    # extract event mentions(trigger)
-
-    emb_ = emb[indices, :]
-    # target_event_adj = target_adj[event_idx, :][:, event_idx]
-
-    # Predict on test set of edges
-    pred_adj = sigmoid(np.dot(emb_, emb_.T))
-
-    # mask = np.triu_indices(len(indices), 1)  # 上三角元素的索引list
-    # preds = pred_event_adj[mask]
-    # target = target_sub_adj[mask]
-
-    preds_true = pred_adj[true_indices]
-    preds_false = pred_adj[false_indices]
-
-    # np.random.shuffle(preds_false)
-    # preds_false = preds_false[:len(preds_true)] # 正:负=1:1
-
-    preds_all = np.hstack([preds_true, preds_false])
-    labels_all = np.hstack([np.ones(len(preds_true)), np.zeros(len(preds_false))])
-
-    # 计算metrics
-    auc_score = roc_auc_score(labels_all, preds_all)
-    ap_score = average_precision_score(labels_all, preds_all)
-    # f_score = get_bcubed(labels_all, preds_all>threshold)
-    # p = precision_score(labels_all, preds_all>threshold)
-    # r = recall_score(labels_all, preds_all>threshold) 
-    return auc_score, ap_score
-
-
-def visual_graph(path, split, orig, pred_adj, num=-1, threshold=0.5):  # 输入邻接矩阵(原图, 预测图), 画出graph
-
-    # plot_adj(path, split+" original visual graph", orig, num)  # 原图
-    
-    pred_adj_ = np.where(pred_adj>threshold, 1, 0)
-    nuclear_norm = np.linalg.norm(pred_adj_, ord='nuc')
-    print("\tnuclear norm/rank:", nuclear_norm)
-    plot_adj(path, split+" pred graph - visual", pred_adj_, num=num)
-
-    # plot_adj(path, split+" weighted pred visual graph", pred_adj, num=num, weighted=True)
-
-
-def degree_analysis(path, split, orig, pred_adj, num=-1, threshold=0.5):
-
-    degree = np.sum(orig, axis=1).astype(np.int)
-    # degree_list_ = np.bincount(degree)
-    max_degree = np.max(degree)
-    min_degree = np.min(degree)
-    mean_degree = np.mean(degree)
-    median_degree = np.median(degree)
-    print("\t\torig graph degree:", '\tmean:', mean_degree, '\tmedian:', median_degree, '\tmax:', max_degree, '\tmin', min_degree)
-
-    # plot_hist(path, split+"original degree graph", degree_list_, num=num)
-
-    adj = np.where(pred_adj>threshold, 1., 0.)
-    pred_degree = np.sum(adj, axis=1).astype(np.int)
-    # degree_list = np.bincount(pred_degree)  # 索引:度, 值:count
-
-    max_degree = np.max(pred_degree)
-    min_degree = np.min(pred_degree)
-    mean_degree = np.mean(pred_degree)
-    median_degree = np.median(pred_degree)
-    print("\t\tpred graph degree:", '\tmean:', mean_degree, '\tmedian:', median_degree, '\tmax:', max_degree, '\tmin', min_degree)
-
-    plot_hist(path, split+" original graph - degree", split+" pred graph - degree", degree, pred_degree, num=num)
+def format_conll(metrics):
+    """Format metrics for output."""
+    result = "MUC: {:.2f} | ".format(metrics['MUC'])
+    result += "B3: {:.2f} | ".format(metrics['B3'])
+    result += "CEAFe: {:.2f} | ".format(metrics['CEAFe'])
+    result += "CoNLL F1: {:.2f} | ".format(metrics['CoNLL F1'])
+    return result

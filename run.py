@@ -16,9 +16,10 @@ from utils.name2object import name2model
 from rs_hyperparameter import rs_tunes, rs_hp_range, rs_set_hp_func
 from gs_hyperparameter import gs_tunes, gs_hp_range, gs_set_hp_func
 from utils.train import *
-from utils.evaluate import *
+from utils.eval import *
 from utils.visual import *
 from dataset.dataset_process import preprocess_function
+from models.clustring import *
 
 from dataset.graph_dataset import GDataset, get_examples_indices
 from datasets import load_dataset
@@ -50,7 +51,7 @@ def set_logger(args):
     return save_dir
 
 
-def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
+def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
 
     # config
     start_model = datetime.datetime.now()
@@ -166,7 +167,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
         ValueError("WARNING: CUDA is not available!")
   
     torch.cuda.manual_seed(args.seed)
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_num)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
     args.device = torch.device("cuda" if use_cuda else "cpu")
 
     # adj_train = torch.tensor(adj_train, device=args.device)
@@ -182,7 +183,6 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
     logging.info("Total number of parameters {}".format(total))
     model.to(args.device)    # GUP
 
-    assert args.encoder != 'gvae'
     optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     # regularizer = None
     # if args.regularizer:
@@ -232,6 +232,8 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
 
         # val#####################################
 
+        hidden_embs = {'Train': hidden_emb}
+
         # 无监督
         for split in ['Dev', 'Test']:
             test_loss, test_mu = optimizer.eval(datasets[split], adj_norm[split], dataset.adjacency[split], split)  # norm adj
@@ -239,16 +241,17 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
             logging.info("\t{}".format(split))
             logging.info("\t\taverage {} loss: {:.4f}".format(split, test_loss))
 
-            test_hidden_emb = test_mu.data.detach().cpu().numpy()
+            hidden_embs[split] = test_mu.data.detach().cpu().numpy()
 
-            test_metrics1 = test_model(test_hidden_emb, dataset.event_idx[split], event_true_sub_indices[split], event_false_sub_indices[split])
+            # test event mention pair
+            test_metrics1 = test_model(hidden_embs[split], dataset.event_idx[split], event_true_sub_indices[split], event_false_sub_indices[split])
             logging.info("\t\tevent coref:" + format_metrics(test_metrics1, split))
 
             entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
-            test_metrics2 = test_model(test_hidden_emb, entity_idx, entity_true_sub_indices[split], entity_false_sub_indices[split])
+            test_metrics2 = test_model(hidden_embs[split], entity_idx, entity_true_sub_indices[split], entity_false_sub_indices[split])
             logging.info("\t\tentity coref:" + format_metrics(test_metrics2, split))
 
-            test_metrics3 = test_model(test_hidden_emb, list(range(args.n_nodes[split])), recover_true_sub_indices[split], recover_false_sub_indices[split])
+            test_metrics3 = test_model(hidden_embs[split], list(range(args.n_nodes[split])), recover_true_sub_indices[split], recover_false_sub_indices[split])
             logging.info("\t\treconstruct adj:" + format_metrics(test_metrics3, split))
 
         # # 有监督
@@ -278,11 +281,19 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
         #             pass
         # ###################
 
-        if (epoch+1) % args.save_freq == 0:
-            model_path = os.path.join(save_dir, str(epoch+1)+model_name)
-            torch.save(model.cpu().state_dict(), model_path)
-            model.to(args.device)
+        if (epoch+1) % args.save_freq == 0 or (epoch + 1)==args.max_epochs:
 
+            model_path = os.path.join(save_dir, str(epoch+1)+model_name)
+            
+            # 共指解析 + 测评
+            for split in ['Train', 'Dev', 'Test']:
+                
+                # eval_model_leiden of eval_model_louvain
+                eval_model_louvain(save_dir, split, hidden_embs[split], dataset.event_idx[split], threshold, num)
+
+            save_check_point(model, model_path)
+            # torch.save(model.cpu().state_dict(), model_path)
+            model.to(args.device)
 
     logging.info("\t ---------------------------Optimization finished---------------------------")
 
@@ -305,11 +316,11 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1):
     # conll_f1 = run_conll_scorer(args.output_dir)
     # logging.info(conll_f1)
 
-    model_path = os.path.join(save_dir, model_name)
-    torch.save(model.cpu().state_dict(), model_path)
+    # model_path = os.path.join(save_dir, model_name)  #最后一个epoch
+    # torch.save(model.cpu().state_dict(), model_path)
 
-    # plot(save_dir, num, losses['Train'], losses['Dev'], losses['Test'])
-    plot1(save_dir, num, losses['Train'])
+    plot(save_dir, num, losses['Train'], losses['Dev'], losses['Test'])
+    # plot1(save_dir, num, losses['Train'])
 
     end_model = datetime.datetime.now()
     logging.info('this model runtime: %s' % str(end_model - start_model))

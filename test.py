@@ -14,21 +14,19 @@ import numpy as np
 from utils.name2object import name2model
 from optimizers import *
 from dataset.graph_dataset import GDataset
-from sklearn.model_selection import PredefinedSplit
 
 import torch.optim
 
 import models.ecr_model
 import optimizers.regularizers as regularizers
 from optimizers.ecr_optimizer import *
-from rs_hyperparameter import rs_tunes, rs_hp_range, rs_set_hp_func
 from utils.train import *
 from utils.evaluate import *
 from utils.visual import *
 from dataset.dataset_process import preprocess_function
 from dataset.graph_dataset import GDataset, get_examples_indices
 from datasets import load_dataset
-from utils.evaluate import visual_graph
+from utils.eval import *
 
 import transformers
 from transformers import (
@@ -151,17 +149,21 @@ def test(model_dir, num=-1, threshold=0.5):
     datasets = {'Train': train_dataset, 'Dev':dev_dataset, 'Test':test_dataset}
     ######################
 
-    # load pretrained model weights
-    model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
-    if args.use_cuda:
-        model.cuda()
+    # # load pretrained model weights
+    # model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
+    # if args.use_cuda:
+    #     model.cuda()
+    device = torch.device("cuda" if args.use_cuda else "cpu")
 
-    model_name = "{}model100_feat-d{}_h1-d{}_h2-d{}.pt".format(num, args.feat_dim, args.hidden1, args.hidden2)
+    model_name = "model{}_feat-d{}_h1-d{}_h2-d{}.pt".format(num, args.feat_dim, args.hidden1, args.hidden2)
     print(model_name)
-    model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
+    
+    # model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
+    model = load_check_point(os.path.join(model_dir, model_name))
+    model.to(device)
 
     optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    optimizer = GAEOptimizer(args, model, optim_method, norm, pos_weight)
+    optimizer = GAEOptimizer(args, model, optim_method, norm, pos_weight, args.use_cuda)
 
     model.eval()
     # eval#############
@@ -177,6 +179,13 @@ def test(model_dir, num=-1, threshold=0.5):
         # pred_adj = torch.sigmoid(mu@mu.T)
         # print("test预测:", time.time() - t2)
         hidden_emb = mu.data.detach().cpu().numpy()
+
+        # cluster
+        print("event clusters")
+        #eval_model_louvain, eval_model_leiden
+        eval_model_leiden(model_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+        # draw_nx_partition(model_dir, split+' event clusters', G, partition, num)
+
         # 计算边
         pred_adj = sigmoid(np.dot(hidden_emb, hidden_emb.T))
 
@@ -188,47 +197,49 @@ def test(model_dir, num=-1, threshold=0.5):
         nuclear_norm = np.linalg.norm(pred_adj_, ord='nuc')
         print("\tnuclear norm/rank:", nuclear_norm)
         
-        degree_analysis(model_dir, split+' event coref', orig_adj, pred_adj_, num, threshold)
-        print("\tdegree analysis done")
+        # degree_analysis(model_dir, split+' event coref', orig_adj, pred_adj_, num, threshold)
+        # print("\tdegree analysis done")
 
-        # 可视化
-        visual_graph(model_dir, split+' event coref', orig_adj, pred_adj_, num, threshold)
-        print('\tvisual graph done')
+        # # 可视化
+        # visual_graph(model_dir, split+' event coref', orig_adj, pred_adj_, num, threshold)
+        # print('\tvisual graph done')
 
         # entity coref##########
         print("entity coref:")
         orig_adj = dataset.entity_coref_adj[split]
         entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
         pred_adj_ = pred_adj[entity_idx, :][:, entity_idx]
-        degree_analysis(model_dir, split+' entity coref', orig_adj, pred_adj_, num, threshold)
-        print("\tdegree analysis done")
+        # degree_analysis(model_dir, split+' entity coref', orig_adj, pred_adj_, num, threshold)
+        # print("\tdegree analysis done")
 
-        # 可视化
-        visual_graph(model_dir, split+' entity coref', orig_adj, pred_adj_, num, threshold)
-        print('\tvisual graph done')
+        # # 可视化
+        # visual_graph(model_dir, split+' entity coref', orig_adj, pred_adj_, num, threshold)
+        # print('\tvisual graph done')
 
-        print('recover adj:')
-        # # metrics#########
-        # print('\tmetrics:')
+        ##################################################
+        # print('recover adj:')
+        # # # metrics#########
+        # # print('\tmetrics:')
         
-        # metrics1 = test_model(hidden_emb, dataset.event_idx[split], event_true_sub_indices[split], event_false_sub_indices[split])
-        # print("\t\tevent coref:" + format_metrics(metrics1, split))
+        # # metrics1 = test_model(hidden_emb, dataset.event_idx[split], event_true_sub_indices[split], event_false_sub_indices[split])
+        # # print("\t\tevent coref:" + format_metrics(metrics1, split))
 
-        # entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
-        # metrics2 = test_model(hidden_emb, entity_idx, entity_true_sub_indices[split], entity_false_sub_indices[split])
-        # print("\t\tentity coref:" + format_metrics(metrics2, split))
+        # # entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
+        # # metrics2 = test_model(hidden_emb, entity_idx, entity_true_sub_indices[split], entity_false_sub_indices[split])
+        # # print("\t\tentity coref:" + format_metrics(metrics2, split))
 
-        # metrics3 = test_model(hidden_emb, list(range(args.n_nodes[split])), recover_true_sub_indices[split], recover_false_sub_indices[split])
-        # print("\t\treconstruct adj:" + format_metrics(metrics3, split))
+        # # metrics3 = test_model(hidden_emb, list(range(args.n_nodes[split])), recover_true_sub_indices[split], recover_false_sub_indices[split])
+        # # print("\t\treconstruct adj:" + format_metrics(metrics3, split))
 
-        # 分析度
-        degree_analysis(model_dir, split+ ' recover', dataset.adjacency[split], pred_adj, num, threshold)
-        print("\tdegree analysis done")
-        # 可视化网络
-        visual_graph(model_dir, split+ ' recover', dataset.adjacency[split], pred_adj, num, threshold)
-        print('\tvisual graph done')
+        # # 分析度
+        # degree_analysis(model_dir, split+ ' recover', dataset.adjacency[split], pred_adj, num, threshold)
+        # print("\tdegree analysis done")
+        # # 可视化网络
+        # visual_graph(model_dir, split+ ' recover', dataset.adjacency[split], pred_adj, num, threshold)
+        # print('\tvisual graph done')
 
 
 if __name__ == "__main__":
+    print("test model")
     args = parser.parse_args()
     test(args.model_dir, args.num, args.threshold)

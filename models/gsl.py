@@ -1,5 +1,6 @@
 import torch.nn as nn
 from layers.gsl_layer import *
+from utils.train import id_func
 
 
 # GVAE
@@ -7,9 +8,9 @@ class GCNModelVAE(nn.Module):
     def __init__(self, input_feat_dim, hidden_dim1, hidden_dim2, dropout):
         super(GCNModelVAE, self).__init__()
         self.gc1 = GraphConvolution(input_feat_dim, hidden_dim1, dropout, act=F.relu)  # mu, log sigma: W0共享
-        self.gc2 = GraphConvolution(hidden_dim1, hidden_dim2, dropout, act=lambda x: x)
-        self.gc3 = GraphConvolution(hidden_dim1, hidden_dim2, dropout, act=lambda x: x)
-        self.dc = InnerProductDecoder(dropout, act=lambda x: x)
+        self.gc2 = GraphConvolution(hidden_dim1, hidden_dim2, dropout, act=id_func)  #lambda x: x
+        self.gc3 = GraphConvolution(hidden_dim1, hidden_dim2, dropout, act=id_func)
+        self.dc = InnerProductDecoder(dropout, act=id_func)
 
     def encode(self, x, adj):
         hidden1 = self.gc1(x, adj)
@@ -34,8 +35,8 @@ class GCNModelAE(nn.Module):
     def __init__(self, input_feat_dim, hidden_dim1, hidden_dim2, dropout):
         super(GCNModelAE, self).__init__()
         self.gc1 = GraphConvolution(input_feat_dim, hidden_dim1, dropout, act=F.relu)
-        self.gc2 = GraphConvolution(hidden_dim1, hidden_dim2, dropout, act=lambda x: x)
-        self.dc = InnerProductDecoder(dropout, act=lambda x: x)
+        self.gc2 = GraphConvolution(hidden_dim1, hidden_dim2, dropout, act=id_func)
+        self.dc = InnerProductDecoder(dropout, act=id_func)
 
     def encode(self, x, adj):
         hidden1 = self.gc1(x, adj)

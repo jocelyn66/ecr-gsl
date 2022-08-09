@@ -70,8 +70,12 @@ class ECRModel(nn.Module):
         # 待优化
         features = []  # ts list
 
+        # loader = torch.utils.data.DataLoader(dataset=dataset, batch_size=32)
+
         # 遍历句子构造句子子图, 同时记录句子文档id
         for _, sent in enumerate(dataset):
+
+            # batch_size, seq_len = sent['input_ids'].shape
 
             input_ids = torch.tensor(sent['input_ids'], device=self.device).reshape(1, -1)
             encoder_output = self.bert_encoder(input_ids)

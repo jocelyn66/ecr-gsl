@@ -9,74 +9,6 @@ from torch import nn
 from utils.train import get_norm_of_matrix, normalize_adjacency
 
 
-# class ECROptimizer(object):
-
-#     def __init__(self, model, optimizer, valid_freq, batch_size,
-#                  regularizer=None, use_cuda=False, dropout=0.):
-#         self.model = model
-#         self.regularizer = regularizer
-#         self.optimizer = optimizer
-#         self.batch_size = batch_size
-#         self.loss_fn = getattr(self, name2loss(self.model.gsl))
-#         # self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
-#         self.use_cuda = use_cuda
-#         self.device = torch.device("cuda" if self.use_cuda else "cpu")
-#         self.valid_freq = valid_freq
-#         self.dropout = dropout
-
-#     def calculate_loss(self, examples):
-#         pass
-
-#         predictions, factors = self.model(examples)
-#         loss = self.loss_fn(predictions)
-#         if self.regularizer:
-#             loss += self.regularizer.forward(factors)
-#         return loss
-
-#     def epoch(self, examples, target, mask):
-#         # batch gd
-
-#         actual_examples = examples[torch.randperm(examples.shape[0]), :]
-#         with tqdm(total=examples.shape[0], unit='ex', disable=not self.verbose) as bar:
-#             bar.set_description(f'train loss')
-#             b_begin = 0
-#             total_loss = 0.0
-#             iter = 0
-#             while b_begin < examples.shape[0]:
-#                 input_batch = actual_examples[b_begin:b_begin + self.batch_size].cuda()
-
-#                 l = self.calculate_loss(input_batch)
-#                 self.optimizer.zero_grad()
-#                 l.backward()
-#                 self.optimizer.step()
-
-#                 b_begin += self.batch_size
-
-#                 total_loss += l
-#                 iter += 1
-#                 bar.update(input_batch.shape[0])
-#                 bar.set_postfix(loss=f'{l.item():.4f}')
-#         total_loss /= iter
-#         return total_loss
-
-#     def evaluate(self, test_data, valid_mode=False):
-#         pass
-
-#         valid_losses = []
-#         valid_loss = None
-
-#         with torch.no_grad():
-#             for idx in enumerate(tqdm(len(test_data))):
-
-#                 loss = self.calculate_loss(test_data[idx])
-#                 valid_losses.append(loss.item())
-
-#             if valid_losses:
-#                 valid_loss = np.mean(valid_losses)
-
-#         return valid_loss
-
-
 class GAEOptimizer(object):
 
     def __init__(self, args, model, optimizer, norm, pos_weight, use_cuda):
@@ -88,7 +20,6 @@ class GAEOptimizer(object):
 
         loss = {0:self.loss_function_gae, 1:self.loss_function_gae1, 2:self.loss_function_gae2, 3:self.loss_function_gae3, 4:self.loss_function_gae4}
         self.loss_fn = loss[args.loss_type]
-        # self.loss_fn = nn.CrossEntropyLoss(reduction='mean')
         self.use_cuda = use_cuda
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
         self.valid_freq = args.valid_freq
@@ -186,40 +117,6 @@ class GAEOptimizer(object):
         # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
         return cost + w + h + d
 
-    # def loss_function_gae2(self, preds, orig, mu, logvar, split='Train'):
-    #     # 乘norm系数
-    #     """L = CE(A, A') + nuclear(W) + L1(H) + F(A'-W-H)"""
-    #     cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
-        
-    #     # H_norm = get_normed_matrix(self.model.H)
-    #     # W_norm = get_normed_matrix(self.model.W)
-
-    #     norm_W = get_norm_of_matrix(self.model.W)
-    #     norm_H = get_norm_of_matrix(self.model.H)
-    #     norm_D = get_norm_of_matrix(preds-self.model.W-self.model.H)
-
-    #     print(norm_W, norm_H, norm_D)
-
-    #     _, s, _ = torch.svd(self.model.W)
-    #     nuclear_norm1 = s.sum()
-
-    #     nuclear_norm = torch.linalg.norm(self.model.W, 'nuc')
-        
-    #     l1_norm = torch.norm(self.model.H, p=1)
-    #     f_norm = torch.linalg.norm(preds-self.model.W-self.model.H)
-
-    #     w = norm_W * self.beta*nuclear_norm
-    #     h = norm_H * self.alpha * l1_norm
-    #     d = norm_D * self.gamma * f_norm
-    #     print(nuclear_norm, "=", nuclear_norm1, l1_norm, f_norm)
-
-    #     print("nuclear norm:", w)
-    #     print("l1 norm", h)
-    #     print("f norm", d)
-
-    #     # return cost + self.beta*nuclear_norm + self.alpha * l1_norm + self.gamma * f_norm
-    #     return cost + h + w + d
-
     def loss_function_gae3(self, preds, orig, mu, logvar, split='Train'):
         """L = CE(A,A') + nuclear(W) + L1(A'-W)"""
         cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
@@ -275,8 +172,8 @@ class GAEOptimizer(object):
         loss.backward()
         self.optimizer.step()
 
-        print("W.grad:", torch.min(self.model.W.grad), torch.max(self.model.W.grad))
-        print("H.grad:", torch.min(self.model.H.grad), torch.max(self.model.H.grad))
+        # print("W.grad:", torch.min(self.model.W.grad), torch.max(self.model.W.grad))
+        # print("H.grad:", torch.min(self.model.H.grad), torch.max(self.model.H.grad))
 
         return loss.item(), mu
 
@@ -286,6 +183,6 @@ class GAEOptimizer(object):
 
         with torch.no_grad():
             recovered, mu, logvar = self.model(dataset, adj_)
-            # loss = self.loss_fn(preds=recovered, orig=orig_, mu=mu, logvar=logvar, split=split)
-        # return loss.item(), mu
-        return 0, mu
+            loss = self.loss_fn(preds=recovered, orig=orig_, mu=mu, logvar=logvar, split=split)
+        return loss.item(), mu
+        # return 0, mu

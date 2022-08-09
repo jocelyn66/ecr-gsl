@@ -24,7 +24,6 @@ parser.add_argument("--double-precision", action="store_true",
                     help="Machine precision")
 parser.add_argument("--save-freq", type=int, default=1000)
 parser.add_argument("--seed", type=int, default=22)
-parser.add_argument("--gpu-num", type=int, default=0)
 
 # training configuration###############
 
@@ -70,7 +69,7 @@ parser.add_argument('--plm_name', type=str, default='bert-base-uncased')
 parser.add_argument('--feat_dim', type=int, default=768, 
                     help='size of features, i.e. bert embedding dim')
 # encoder config#####################
-parser.add_argument('--rand-node-rate', type=int, default=0.2)
+parser.add_argument('--rand-node-rate', type=float, default=0.2)
 parser.add_argument("--encoder", type=str, choices = ['gae', 'gvae'], default='gae',
                     help="gsl model")
 parser.add_argument("--dropout", "--en-dropout", type=float, default=0.,
@@ -81,7 +80,9 @@ parser.add_argument('--hidden1', type=int, default=32, help='Number of units in 
 parser.add_argument('--hidden2', type=int, default=16, help='Number of units in hidden layer 2.')
 
 # decoder
-parser.add_argument("--decoder", type=str, default='')
+parser.add_argument("--decoder", type=str, default='')  #无用
+# parser.add_argument('--threshold', type=float, default=0.5)
+
 parser = parser.parse_args()
 
 

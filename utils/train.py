@@ -131,3 +131,25 @@ def get_norm_of_matrix(adj):
 
 def sigmoid(x):
         return 1 / (1 + np.exp(-x))
+
+
+def save_check_point(model, fname):
+    '''
+    Saves Pytorch model to a file
+    :param model: Pytorch model
+    :param fname: output filename
+    '''
+    torch.save(model, fname)
+
+
+def load_check_point(fname):
+    '''
+    Loads Pytorch model from a file
+    :param fname: model's filename
+    :return:Pytorch model
+    '''
+    return torch.load(fname)
+
+
+def id_func(x):
+    return x
