@@ -16,9 +16,10 @@ class GDataset(object):
     def __init__(self, args):
 
         self.name = args.dataset
-        self.event_idx = {'Train':[], 'Dev':[], 'Test':[]}
+        self.event_idx = {'Train':[], 'Dev':[], 'Test':[]}  #所有节点(event+entity)中的ind
         self.event_chain_dict = {'Train':{}, 'Dev':{}, 'Test':{}}
         self.entity_chain_dict = {'Train':{}, 'Dev':{}, 'Test':{}}
+        self.event_chain_list = {'Train':[], 'Dev':[], 'Test':[]}
         self.adjacency = {}  # 邻接矩阵, 节点:event mention(trigger), entity mention, 边:0./1.,对角线0,句子关系,文档关系
         self.event_coref_adj = {}  # 节点:event mention, 边: 共指关系(成立:1), 对角线1(但不用作label)
         self.entity_coref_adj = {}
@@ -38,6 +39,8 @@ class GDataset(object):
         for split in ['Train', 'Dev', 'Test']:
             self.adjacency[split] = self.get_adjacency(file[split], split)
             self.event_coref_adj[split] = self.get_event_coref_adj(split)  # bool矩阵, 对角线0
+            self.event_chain_list[split] = self.get_gold_list(split)
+            # entity
             entity_idx = list(set(range(self.n_nodes[split])) - set(self.event_idx[split]))
             self.entity_coref_adj[split] = self.get_coref_sub_adj(self.entity_chain_dict[split], entity_idx, split)
 
@@ -141,6 +144,23 @@ class GDataset(object):
             rows, cols = zip(*mask)
             adj[rows, cols] = 1
         return ((adj + adj.T)>0)[idx, :][:, idx]
+
+    def get_gold_list(self, split):
+        
+        l = np.zeros(self.n_nodes[split])
+
+        # chain的映射
+        # chains = self.event_chain_dict[split].keys()
+        # chains_set = set(chains)
+
+        # chains_mapping = {}
+        # for label in chains_set:
+        #     chains_mapping[label] = len(chains_mapping)
+
+        for i, chain in enumerate(self.event_chain_dict[split]):
+            l[self.event_chain_dict[split][chain]] = int(i)
+        #enumerate dict, list[i]=chain idx
+        return l[self.event_idx[split]].astype(int).tolist()
 
 
 def get_examples_indices(target_adj):

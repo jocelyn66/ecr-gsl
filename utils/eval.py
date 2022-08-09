@@ -2,6 +2,7 @@ import numpy as np
 import igraph as ig
 import networkx as nx
 from sklearn.metrics import label_ranking_loss, roc_auc_score, average_precision_score, f1_score, precision_score, recall_score
+from sklearn.metrics.cluster import normalized_mutual_info_score as nmi
 
 from utils.train import sigmoid
 from utils.visual import *
@@ -18,53 +19,14 @@ def format_metrics(metrics, split):
     return str
 
 
-# cluster####################
-def mult_precision(el1, el2, cdict, ldict):
-    """Computes the multiplicity precision for two elements."""
-    return min(len(cdict[el1] & cdict[el2]), len(ldict[el1] & ldict[el2])) \
-        / float(len(cdict[el1] & cdict[el2]))
-
-
-def mult_recall(el1, el2, cdict, ldict):
-    """Computes the multiplicity recall for two elements."""
-    return min(len(cdict[el1] & cdict[el2]), len(ldict[el1] & ldict[el2])) \
-        / float(len(ldict[el1] & ldict[el2]))
-        
-
-def precision(cdict, ldict):
-    """Computes overall extended BCubed precision for the C and L dicts."""
-    return np.mean([np.mean([mult_precision(el1, el2, cdict, ldict) \
-        for el2 in cdict if cdict[el1] & cdict[el2]]) for el1 in cdict])
-
-
-def recall(cdict, ldict):
-    """Computes overall extended BCubed recall for the C and L dicts."""
-    return np.mean([np.mean([mult_recall(el1, el2, cdict, ldict) \
-        for el2 in cdict if ldict[el1] & ldict[el2]]) for el1 in cdict])
-
-
-def fscore(p_val, r_val, beta=1.0):
-    """Computes the F_{beta}-score of given precision and recall values."""
-    return (1.0 + beta**2) * (p_val * r_val / (beta**2 * p_val + r_val))   
-
-
-def bcubed(gold_lst, predicted_lst):
-    # in: gold_list: cluster set
-    """
-    Takes gold, predicted.
-    Returns recall, precision, f1score
-    """
-    gold = {i:{cluster} for i,cluster in enumerate(gold_lst)}
-    pred = {i:{cluster} for i,cluster in enumerate(predicted_lst)}
-    p = precision(pred, gold)
-    r = recall(pred, gold)
-    return r, p, fscore(p, r)
-    
-###################################
+def format_b3_metrics(metrics):
+    # f_score, roc_score, ap_score, p, r
+    str = 'R={:.5f}, P={:.5f}, F1={:.5f}'.format(metrics[0], metrics[1], metrics[2])
+    return str
 
 
 def test_model(emb, indices, true_indices, false_indices):
-    # target_adj: 
+    # 计算: AUC, AP
 
     # 根据共指关系计算AUC等
     # 大矩阵: embedding, 共指关系矩阵
@@ -99,36 +61,42 @@ def test_model(emb, indices, true_indices, false_indices):
     return auc_score, ap_score
 
 
-def eval_model_louvain(path, split, emb, indices=None, threshold=0.5, num=-1):
-    # embedding -> event cluster -> 可视化 + 测评
-    print('louvain')
+def eval_model_louvain(path, split, emb, indices=None, threshold=0.5, num=-1, visual=False):
+    # embedding -> event cluster -> 可视化
+    # return pred list(label list), n_comm
+
+    # print('\tlouvain')
     emb_ = emb[indices, :]
     event_adj = sigmoid(np.dot(emb_, emb_.T))
 
-    G = adj_to_nx(event_adj, threshold)  # 01图
-
+    G, n_edges = adj_to_nx(event_adj, threshold)  # 01图
     # dir = os.path.join(path, 'g.pickle')
     # with open(dir, 'wb') as f:
     #     pickle.dump(G, f)
 
     partition = louvain(G)
-    print('community=', max(partition.values()) + 1)
+    n_comm = max(partition.values()) + 1
+    # print('\t\tcommunity=', n_comm)
+    
+    if visual:
+        draw_nx_partition(path, split+' event clusters', G, partition, num)
+    return list(partition.values()), n_comm, n_edges
 
-    draw_nx_partition(path, split+' event clusters', G, partition, num)
-    # 测评??
-    # partition -> label
 
-
-def eval_model_leiden(path, split, emb, indices=None, threshold=0.5, num=-1):
-    print('leiden')
+def eval_model_leiden(path, split, emb, indices=None, threshold=0.5, num=-1, visual=False):
+    # print('\tleiden')
     emb_ = emb[indices, :]
     event_adj = sigmoid(np.dot(emb_, emb_.T))
-    G = adj_to_ig(event_adj, threshold)  # 01图
+    G, n_edges = adj_to_ig(event_adj, threshold)  # 01图
     partition = leiden(G)
-    print('community=', len(partition))
+    n_comm = len(partition)
 
-    dir = os.path.join(path, split+' event clusters') + str(num) + '.png'
-    ig.plot(partition, dir)
+    # print('\t\tcommunity=', n_comm)
+    if visual:
+        dir = os.path.join(path, split+' event clusters') + str(num) + '.png'
+        ig.plot(partition, dir)
+
+    return partition.membership, n_comm, n_edges
     
 
 def visual_graph(path, split, orig, pred_adj, num=-1, threshold=0.5):  # 输入邻接矩阵(原图, 预测图), 画出graph
@@ -137,7 +105,7 @@ def visual_graph(path, split, orig, pred_adj, num=-1, threshold=0.5):  # 输入�
     
     pred_adj_ = np.where(pred_adj>threshold, 1, 0)
     nuclear_norm = np.linalg.norm(pred_adj_, ord='nuc')
-    print("\tnuclear norm/rank:", nuclear_norm)
+    print("\t\tnuclear norm/rank:", nuclear_norm)
     plot_adj(path, split+" pred graph - visual", pred_adj_, num=num)
 
     # plot_adj(path, split+" weighted pred visual graph", pred_adj, num=num, weighted=True)
@@ -173,19 +141,27 @@ def adj_to_nx(adj, threshold=0.5):
     G = nx.Graph()
     # adj = np.where(adj>threshold, 1., 0.)
     ind = np.where(np.triu(adj, 1)>threshold)
-    print("#edges=", len(ind[0]))
+    # print("\t\t#edges=", len(ind[0]))
     # print("####", type(ind), ind)
     edges = zip(ind[0], ind[1])
+    G.add_nodes_from(list(range(adj.shape[0])))
     G.add_edges_from(edges)
-    return G
+    return G, len(ind[0])
 
 
 def adj_to_ig(adj, threshold=0.5):
 
+    G = ig.Graph()
     # adj = np.where(adj>threshold, 1., 0.)
     ind = np.where(np.triu(adj, 1)>threshold)
-    print("#edges=", len(ind[0]))
+    # print("\t\t#edges=", len(ind[0]))
     # print("####", type(ind), ind)
     edges = zip(ind[0], ind[1])
-    G = ig.Graph(edges)
-    return G
+    # G = ig.Graph(edges)
+    G.add_vertices(adj.shape[0])
+    G.add_edges(edges)
+    return G, len(ind[0])
+
+
+def cal_nmi(labels_true, labels_pred):
+    return nmi(labels_true, labels_pred)

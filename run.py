@@ -23,6 +23,7 @@ from models.clustring import *
 
 from dataset.graph_dataset import GDataset, get_examples_indices
 from datasets import load_dataset
+from utils.bcubed_scorer import bcubed
 
 import transformers
 from transformers import (
@@ -57,7 +58,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     start_model = datetime.datetime.now()
     random.seed(args.seed)
     np.random.seed(args.seed)
-    torch.manual_seed(2022)
+    torch.manual_seed(args.seed)
 
     if args.rand_search or args.grid_search:
         set_hp(args, hps)
@@ -79,6 +80,9 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     # dataset###############
     dataset = GDataset(args)
     args.n_nodes = dataset.n_nodes
+
+    # for split in ['Train', 'Dev', 'Test']:
+    #     print("###", dataset.event_chain_list[split])
 
     # Some preprocessing:
     # adj_norm = preprocess_adjacency(adj_train)
@@ -109,6 +113,12 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
         entity_true_sub_indices[split], entity_false_sub_indices[split] = get_examples_indices(dataset.entity_coref_adj[split])
         recover_true_sub_indices[split], recover_false_sub_indices[split] = get_examples_indices(dataset.adjacency[split])
 
+    #Load Schema
+    with open(args.schema_path, 'r') as f:  #3个set的schema
+        schema_list = json.load(f)
+        doc_schema = schema_list[0]
+        event_schema = schema_list[1]
+        entity_schema = schema_list[2]
     # bert################################
      #Load Datasets
     data_files = {}
@@ -116,12 +126,6 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     data_files["dev"] = args.dev_file
     data_files["test"] = args.test_file
     datasets = load_dataset("json", data_files=data_files)
-    #Load Schema
-    with open(args.schema_path, 'r') as f:
-        schema_list = json.load(f)
-        doc_schema = schema_list[0]
-        event_schema = schema_list[1]
-        entity_schema = schema_list[2]
 
     #introduce PLM
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name)
@@ -218,42 +222,70 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
 
         model.eval()
 
-        metrics1 = test_model(hidden_emb, dataset.event_idx['Train'], event_true_sub_indices['Train'], event_false_sub_indices['Train'])
-        logging.info("\t\tevent coref:" + format_metrics(metrics1, 'Train'))
+        #AUC, AP###############
+        # metrics1 = test_model(hidden_emb, dataset.event_idx['Train'], event_true_sub_indices['Train'], event_false_sub_indices['Train'])
+        # logging.info("\t\tevent coref:" + format_metrics(metrics1, 'Train'))
 
-        entity_idx = list(set(range(args.n_nodes['Train'])) - set(dataset.event_idx['Train']))
-        metrics2 = test_model(hidden_emb, entity_idx, entity_true_sub_indices['Train'], entity_false_sub_indices['Train'])
-        logging.info("\t\tentity coref:" + format_metrics(metrics2, 'Train'))
+        # entity_idx = list(set(range(args.n_nodes['Train'])) - set(dataset.event_idx['Train']))
+        # metrics2 = test_model(hidden_emb, entity_idx, entity_true_sub_indices['Train'], entity_false_sub_indices['Train'])
+        # logging.info("\t\tentity coref:" + format_metrics(metrics2, 'Train'))
 
-        metrics3 = test_model(hidden_emb, list(range(args.n_nodes['Train'])), recover_true_sub_indices['Train'], recover_false_sub_indices['Train'])
-        logging.info("\t\treconstruct adj:" + format_metrics(metrics3, 'Train'))
+        # metrics3 = test_model(hidden_emb, list(range(args.n_nodes['Train'])), recover_true_sub_indices['Train'], recover_false_sub_indices['Train'])
+        # logging.info("\t\treconstruct adj:" + format_metrics(metrics3, 'Train'))
+
+        # B3###################
+        # val#####################################
+        # 无监督
+        if (epoch+1) % args.valid_freq == 0:
+            
+            for threshold in [0.95, 0.9, 0.85]:
+                # eval_model_leiden of eval_model_louvain
+                pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+                logging.info("\t\t{}, n_edges={}".format(threshold, n_edges))
+                logging.info("\t\tlouvain: n_community = {}".format(n_comm))
+                eval_metrics = bcubed(dataset.event_chain_list[split], pred_list)
+                logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
+
+                # pred_list2, n_comm2, n_edges2 = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+                # logging.info("\t\tleiden: n_community = {}".format(n_comm2))
+                # eval_metrics2 = bcubed(dataset.event_chain_list[split], pred_list2)
+                # logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics2))
+
+            for split in ['Dev', 'Test']:
+                test_loss, test_mu = optimizer.eval(datasets[split], adj_norm[split], dataset.adjacency[split], split)  # norm adj
+                losses[split].append(test_loss)
+                logging.info("\t{}".format(split))
+                logging.info("\t\taverage {} loss: {:.4f}".format(split, test_loss))
+
+                hidden_emb = test_mu.data.detach().cpu().numpy()
+
+                #auc, ap: test event mention pair###########
+                # test_metrics1 = test_model(hidden_embs[split], dataset.event_idx[split], event_true_sub_indices[split], event_false_sub_indices[split])
+                # logging.info("\t\tevent coref:" + format_metrics(test_metrics1, split))
+
+                # entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
+                # test_metrics2 = test_model(hidden_embs[split], entity_idx, entity_true_sub_indices[split], entity_false_sub_indices[split])
+                # logging.info("\t\tentity coref:" + format_metrics(test_metrics2, split))
+
+                # test_metrics3 = test_model(hidden_embs[split], list(range(args.n_nodes[split])), recover_true_sub_indices[split], recover_false_sub_indices[split])
+                # logging.info("\t\treconstruct adj:" + format_metrics(test_metrics3, split))
+
+                #b3###########################
+                # logging.info("B3 Evaluation in {}:".format(split))
+                for threshold in [0.95, 0.9, 0.85]:
+                    # eval_model_leiden of eval_model_louvain
+                    pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+                    logging.info("\t\t{}, n_edges={}".format(threshold, n_edges))
+                    logging.info("\t\tlouvain: n_community = {}".format(n_comm))
+                    eval_metrics = bcubed(dataset.event_chain_list[split], pred_list)
+                    logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
+
+                    # pred_list2, n_comm2, n_edges = eval_model_louvain(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+                    # logging.info("\t\tleiden: n_community = {}".format(n_comm2))
+                    # eval_metrics2 = bcubed(dataset.event_chain_list[split], pred_list2)
+                    # logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics2))
 
         logging.info("\t\ttime={:.5f}".format(time.time() - t))
-
-        # val#####################################
-
-        hidden_embs = {'Train': hidden_emb}
-
-        # 无监督
-        for split in ['Dev', 'Test']:
-            test_loss, test_mu = optimizer.eval(datasets[split], adj_norm[split], dataset.adjacency[split], split)  # norm adj
-            losses[split].append(test_loss)
-            logging.info("\t{}".format(split))
-            logging.info("\t\taverage {} loss: {:.4f}".format(split, test_loss))
-
-            hidden_embs[split] = test_mu.data.detach().cpu().numpy()
-
-            # test event mention pair
-            test_metrics1 = test_model(hidden_embs[split], dataset.event_idx[split], event_true_sub_indices[split], event_false_sub_indices[split])
-            logging.info("\t\tevent coref:" + format_metrics(test_metrics1, split))
-
-            entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
-            test_metrics2 = test_model(hidden_embs[split], entity_idx, entity_true_sub_indices[split], entity_false_sub_indices[split])
-            logging.info("\t\tentity coref:" + format_metrics(test_metrics2, split))
-
-            test_metrics3 = test_model(hidden_embs[split], list(range(args.n_nodes[split])), recover_true_sub_indices[split], recover_false_sub_indices[split])
-            logging.info("\t\treconstruct adj:" + format_metrics(test_metrics3, split))
-
         # # 有监督
         # model.eval()
         # if (epoch + 1) % args.valid_freq == 0:
@@ -281,19 +313,14 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
         #             pass
         # ###################
 
-        if (epoch+1) % args.save_freq == 0 or (epoch + 1)==args.max_epochs:
+        #save_freq###########
+        # if (epoch+1) % args.save_freq == 0 or (epoch + 1)==args.max_epochs:
 
-            model_path = os.path.join(save_dir, str(epoch+1)+model_name)
+        #     model_path = os.path.join(save_dir, str(epoch+1)+model_name)
             
-            # 共指解析 + 测评
-            for split in ['Train', 'Dev', 'Test']:
-                
-                # eval_model_leiden of eval_model_louvain
-                eval_model_louvain(save_dir, split, hidden_embs[split], dataset.event_idx[split], threshold, num)
-
-            save_check_point(model, model_path)
-            # torch.save(model.cpu().state_dict(), model_path)
-            model.to(args.device)
+        #     save_check_point(model, model_path)
+        #     # torch.save(model.cpu().state_dict(), model_path)
+        #     # model.to(args.device)
 
     logging.info("\t ---------------------------Optimization finished---------------------------")
 
@@ -316,11 +343,12 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     # conll_f1 = run_conll_scorer(args.output_dir)
     # logging.info(conll_f1)
 
-    # model_path = os.path.join(save_dir, model_name)  #最后一个epoch
+    model_path = os.path.join(save_dir, model_name)  #最后一个epoch
+    save_check_point(model, model_path)
     # torch.save(model.cpu().state_dict(), model_path)
 
-    plot(save_dir, num, losses['Train'], losses['Dev'], losses['Test'])
-    # plot1(save_dir, num, losses['Train'])
+    # plot(save_dir, num, losses['Train'], losses['Dev'], losses['Test'])
+    plot1(save_dir, num, losses['Train'])
 
     end_model = datetime.datetime.now()
     logging.info('this model runtime: %s' % str(end_model - start_model))

@@ -21,12 +21,12 @@ import models.ecr_model
 import optimizers.regularizers as regularizers
 from optimizers.ecr_optimizer import *
 from utils.train import *
-from utils.evaluate import *
 from utils.visual import *
 from dataset.dataset_process import preprocess_function
 from dataset.graph_dataset import GDataset, get_examples_indices
 from datasets import load_dataset
 from utils.eval import *
+from utils.bcubed_scorer import bcubed
 
 import transformers
 from transformers import (
@@ -150,7 +150,7 @@ def test(model_dir, num=-1, threshold=0.5):
     ######################
 
     # # load pretrained model weights
-    # model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
+    model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
     # if args.use_cuda:
     #     model.cuda()
     device = torch.device("cuda" if args.use_cuda else "cpu")
@@ -158,8 +158,8 @@ def test(model_dir, num=-1, threshold=0.5):
     model_name = "model{}_feat-d{}_h1-d{}_h2-d{}.pt".format(num, args.feat_dim, args.hidden1, args.hidden2)
     print(model_name)
     
-    # model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
-    model = load_check_point(os.path.join(model_dir, model_name))
+    model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
+    # model = load_check_point(os.path.join(model_dir, model_name))
     model.to(device)
 
     optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -181,21 +181,27 @@ def test(model_dir, num=-1, threshold=0.5):
         hidden_emb = mu.data.detach().cpu().numpy()
 
         # cluster
-        print("event clusters")
-        #eval_model_louvain, eval_model_leiden
-        eval_model_leiden(model_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
-        # draw_nx_partition(model_dir, split+' event clusters', G, partition, num)
+        print("\tecr")
+        pred_list, n_comm, n_edges = eval_model_louvain(model_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+        eval_metrics = bcubed(dataset.event_chain_list[split], pred_list)
+        print("\t\tb3 metrics:", format_b3_metrics(eval_metrics))
+        print("\t\tnmi metric:", cal_nmi(dataset.event_chain_list[split], pred_list))
+
+        pred_list2, n_comm2 = eval_model_leiden(model_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+        eval_metrics2 = bcubed(dataset.event_chain_list[split], pred_list2)
+        print("\t\tb3 metrics:", format_b3_metrics(eval_metrics2))
+        print("\t\tnmi metric:", cal_nmi(dataset.event_chain_list[split], pred_list2))
 
         # 计算边
         pred_adj = sigmoid(np.dot(hidden_emb, hidden_emb.T))
 
         # event coref#########
-        print("event coref:")
+        print("\tevent coref:")
         orig_adj = dataset.event_coref_adj[split]
         pred_adj_ = pred_adj[dataset.event_idx[split], :][:, dataset.event_idx[split]]
 
         nuclear_norm = np.linalg.norm(pred_adj_, ord='nuc')
-        print("\tnuclear norm/rank:", nuclear_norm)
+        print("\t\tnuclear norm/rank:", nuclear_norm)
         
         # degree_analysis(model_dir, split+' event coref', orig_adj, pred_adj_, num, threshold)
         # print("\tdegree analysis done")
@@ -205,7 +211,7 @@ def test(model_dir, num=-1, threshold=0.5):
         # print('\tvisual graph done')
 
         # entity coref##########
-        print("entity coref:")
+        print("\tentity coref:")
         orig_adj = dataset.entity_coref_adj[split]
         entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
         pred_adj_ = pred_adj[entity_idx, :][:, entity_idx]

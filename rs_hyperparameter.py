@@ -3,23 +3,25 @@ from config import parser
 
 np.random.seed(parser.seed)
 
-search_size = 10
+search_size = 11
 rs_tunes = 'learning_rate,rand_node_rate,beta,alpha,gamma'
 
 # hps_dropout = [0] * 14
-hps_lr = [0.00005] * search_size    # [0.00001, 0.00003, 0.00005]
+hps_lr = [None] * search_size    # [0.00001, 0.00003, 0.00005]
 # hps_lr = np.random.rand(search_size) * 0.004 + 0.001    # [0.001, 0.005]
 # hps_lr = np.random.rand(search_size)*3-5
 # hps_lr = np.power(10, hps_lr)   
-hps_rand_node_rate = [0.3] * search_size
+hps_rand_node_rate = [0, 0.1, 0.3, 0.5, 0.7, 0.9, 0.2, 0.4, 0.6, 0.8, 1.0]
 # hps_encoder = ['gae', 'gvae'] * 10
 # hps_beta = [0.0001]
 # hps_alpha = [0.0001] #[0.001, 0.0001, 0.00001, 0.000001]
 hps_gamma = [None] * search_size #[0.0001, 0.00001, 0.000001]
-hps_beta = np.random.rand(search_size)*4-4
-hps_beta = np.power(10, hps_beta)
-hps_alpha = np.random.rand(search_size)*4-4
-hps_alpha = np.power(10, hps_alpha)
+hps_beta = [None] * search_size
+hps_alpha = [None] * search_size
+# hps_beta = np.random.rand(search_size)*4-4
+# hps_beta = np.power(10, hps_beta)
+# hps_alpha = np.random.rand(search_size)*4-4
+# hps_alpha = np.power(10, hps_alpha)
 # hps_gamma = np.random.rand(search_size)*3-1
 # hps_gamma = np.power(10, hps_gamma)
 
