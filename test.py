@@ -150,7 +150,7 @@ def test(model_dir, num=-1, threshold=0.5):
     ######################
 
     # # load pretrained model weights
-    model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
+    # model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
     # if args.use_cuda:
     #     model.cuda()
     device = torch.device("cuda" if args.use_cuda else "cpu")
@@ -158,8 +158,8 @@ def test(model_dir, num=-1, threshold=0.5):
     model_name = "model{}_feat-d{}_h1-d{}_h2-d{}.pt".format(num, args.feat_dim, args.hidden1, args.hidden2)
     print(model_name)
     
-    model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
-    # model = load_check_point(os.path.join(model_dir, model_name))
+    # model.load_state_dict(torch.load(os.path.join(model_dir, model_name)))
+    model = load_check_point(os.path.join(model_dir, model_name))
     model.to(device)
 
     optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
@@ -182,15 +182,17 @@ def test(model_dir, num=-1, threshold=0.5):
 
         # cluster
         print("\tecr")
-        pred_list, n_comm, n_edges = eval_model_louvain(model_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
-        eval_metrics = bcubed(dataset.event_chain_list[split], pred_list)
-        print("\t\tb3 metrics:", format_b3_metrics(eval_metrics))
-        print("\t\tnmi metric:", cal_nmi(dataset.event_chain_list[split], pred_list))
-
-        pred_list2, n_comm2 = eval_model_leiden(model_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+        pred_list2, n_comm2,n_edges = eval_model_leiden(model_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
         eval_metrics2 = bcubed(dataset.event_chain_list[split], pred_list2)
+        print('threshold=', threshold, ', n_edges=', n_edges)
+        print('\tleiden:', 'n_community=', n_comm2)
         print("\t\tb3 metrics:", format_b3_metrics(eval_metrics2))
-        print("\t\tnmi metric:", cal_nmi(dataset.event_chain_list[split], pred_list2))
+        # print("\t\tnmi metric:", cal_nmi(dataset.event_chain_list[split], pred_list2))
+
+        # pred_list, n_comm, n_edges = eval_model_louvain(model_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
+        # eval_metrics = bcubed(dataset.event_chain_list[split], pred_list)
+        # print("\t\tb3 metrics:", format_b3_metrics(eval_metrics))
+        # print("\t\tnmi metric:", cal_nmi(dataset.event_chain_list[split], pred_list))
 
         # 计算边
         pred_adj = sigmoid(np.dot(hidden_emb, hidden_emb.T))

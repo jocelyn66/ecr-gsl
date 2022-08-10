@@ -89,10 +89,23 @@ def sparse_mx_to_torch_sparse_tensor(sparse_mx):
     return torch.sparse.FloatTensor(indices, values, shape)
 
 
-def add_new_item(dict, item, idx):
-    if not item in dict.keys():
-        dict[item] = []
-    dict[item].append(idx)
+def add_new_item(dict, item, value, item2=None):
+    if item2:
+        if not item in dict.keys():
+            dict[item] = {}
+        if not item2 in dict[item].keys():
+            dict[item][item2] = []
+        dict[item][item2].append(value)
+    else:
+        if not item in dict.keys():
+            dict[item] = []
+        dict[item].append(value)
+
+
+# def add_new_item(dict, item, value):
+#     if not item in dict.keys():
+#         dict[item] = []
+#     dict[item].append(value)
 
 
 def preprocess_adjacency(adj):

@@ -7,9 +7,9 @@ import networkx as nx
 import matplotlib.cm as cm
 
 
-def plot(path, num, train_loss, dev_loss, test_loss):
+def plot(path, descrip, num, train_loss, dev_loss, test_loss):
     
-    dir = os.path.join(path, 'converg') + str(num)
+    dir = os.path.join(path, str(num)+descrip)
 
     fig, ax = plt.subplots(4,1,dpi=100, figsize=(12,18))
     epoch = list(range(len(train_loss)))
@@ -35,10 +35,42 @@ def plot(path, num, train_loss, dev_loss, test_loss):
 
     plt.pause(10)
     plt.close(fig)
+
+
+def plot_splits(path, descrip, num, dict):
     
-def plot1(path, num, train_loss):
+    dir = os.path.join(path, str(num)+descrip) + '.png'
+
+    fig, ax = plt.subplots(4,1,dpi=100, figsize=(12,18))
+    epoch = list(range(len(dict['Train'])))
+    ax[0].plot(epoch, dict['Train'], label='Train', color='#4472C4')
+    if len(dict['Train']) == dict['Test']:
+        ax[0].plot(epoch, dict['Dev'], label='Dev', color='#C00000')
+        ax[0].plot(epoch, dict['Test'], label='Test', color='green')
+    ax[0].legend(loc='best')
+
+    ax[1].plot(epoch, dict['Train'], color='#4472C4')
+    ax[1].set_title('Train')
+    ax[2].plot(epoch, dict['Dev'], color='#C00000')
+    ax[2].set_title('Dev')
+    ax[3].plot(epoch, dict['Test'], color='green')
+    ax[3].set_title('Test')
+    # ax.set_title(name)
+    # plt.grid(b=True, axis='y')
+
+    # ax.grid(True)
+    fig.tight_layout()
+
+    # plt.imshow()
+    plt.savefig(dir, bbox_inches='tight')
+
+    plt.pause(10)
+    plt.close(fig)
+
+
+def plot1(path, descrip, num, train_loss):
     
-    dir = os.path.join(path, 'converg') + str(num)
+    dir = os.path.join(path, descrip) + str(num)
 
     fig, ax = plt.subplots(1,1,dpi=100, figsize=(12,18))
     epoch = list(range(len(train_loss)))

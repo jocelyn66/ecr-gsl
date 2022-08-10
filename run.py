@@ -200,6 +200,9 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     best_model_path = ''
     hidden_emb = None
     losses = {'Train': [], 'Dev': [], 'Test': []}
+    b3s = {'Train': [], 'Dev': [], 'Test': []}
+    nmis = {'Train': [], 'Dev': [], 'Test': []}
+    stats = {}
 
     logging.info("\t ---------------------------Start Optimization-------------------------------")
     for epoch in range(args.max_epochs):
@@ -240,11 +243,18 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
             
             for threshold in [0.95, 0.9, 0.85]:
                 # eval_model_leiden of eval_model_louvain
-                pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
-                logging.info("\t\t{}, n_edges={}".format(threshold, n_edges))
-                logging.info("\t\tlouvain: n_community = {}".format(n_comm))
-                eval_metrics = bcubed(dataset.event_chain_list[split], pred_list)
+                pred_list, n_comm, n_edges = eval_model_leiden(save_dir, 'Train', hidden_emb, dataset.event_idx['Train'], threshold, num)
+                logging.info("\t\tthreshold={}, n_edges={}".format(threshold, n_edges))
+                logging.info("\t\t\tlouvain: n_community = {}".format(n_comm))
+                
+                eval_metrics = bcubed(dataset.event_chain_list['Train'], pred_list)
+                nmi_metric = cal_nmi(dataset.event_chain_list['Train'], pred_list)
                 logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
+                logging.info("\t\t\tnmi={:.5f}".format(nmi_metric))
+                add_new_item(stats, 'b3_r_'+str(threshold), eval_metrics[0], 'Train')
+                add_new_item(stats, 'b3_p_'+str(threshold), eval_metrics[1], 'Train')
+                add_new_item(stats, 'b3_f_'+str(threshold), eval_metrics[2], 'Train')
+                add_new_item(stats,'nmi_'+str(threshold), nmi_metric, 'Train')
 
                 # pred_list2, n_comm2, n_edges2 = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
                 # logging.info("\t\tleiden: n_community = {}".format(n_comm2))
@@ -277,8 +287,15 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
                     pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
                     logging.info("\t\t{}, n_edges={}".format(threshold, n_edges))
                     logging.info("\t\tlouvain: n_community = {}".format(n_comm))
+                    
                     eval_metrics = bcubed(dataset.event_chain_list[split], pred_list)
+                    nmi_metric = cal_nmi(dataset.event_chain_list[split], pred_list)
                     logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
+                    logging.info("\t\t\tnmi={:.5f}".format(nmi_metric))
+                    add_new_item(stats, 'b3_r_'+str(threshold), eval_metrics[0], split)
+                    add_new_item(stats, 'b3_p_'+str(threshold), eval_metrics[1], split)
+                    add_new_item(stats, 'b3_f_'+str(threshold), eval_metrics[2], split)
+                    add_new_item(stats,'nmi_'+str(threshold), nmi_metric, split)
 
                     # pred_list2, n_comm2, n_edges = eval_model_louvain(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
                     # logging.info("\t\tleiden: n_community = {}".format(n_comm2))
@@ -347,8 +364,33 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     save_check_point(model, model_path)
     # torch.save(model.cpu().state_dict(), model_path)
 
-    # plot(save_dir, num, losses['Train'], losses['Dev'], losses['Test'])
-    plot1(save_dir, num, losses['Train'])
+    plot(save_dir, 'converg', num, losses['Train'], losses['Dev'], losses['Test'])
+    plot_splits(save_dir, 'b3_r_0.95', num, stats['b3_r_0.95'])
+    plot_splits(save_dir, 'b3_p_0.95', num, stats['b3_p_0.95'])
+    plot_splits(save_dir, 'b3_f_0.95', num, stats['b3_f_0.95'])
+    plot_splits(save_dir, 'b3_r_0.9', num, stats['b3_r_0.9'])
+    plot_splits(save_dir, 'b3_p_0.9', num, stats['b3_p_0.9'])
+    plot_splits(save_dir, 'b3_f_0.9', num, stats['b3_f_0.9'])
+    plot_splits(save_dir, 'b3_r_0.85', num, stats['b3_r_0.85'])
+    plot_splits(save_dir, 'b3_p_0.85', num, stats['b3_p_0.85'])
+    plot_splits(save_dir, 'b3_f_0.85', num, stats['b3_f_0.85'])
+    plot_splits(save_dir, 'nmi_0.95', num, stats['nmi_0.95'])
+    plot_splits(save_dir, 'nmi_0.95', num, stats['nmi_0.9'])
+    plot_splits(save_dir, 'nmi_0.95', num, stats['nmi_0.85'])
+    # plot1(save_dir, 'converg', num, losses['Train'])
+
+    # # save statistics to file
+    # res = []
+    # for vdict in [losses, b3s, nmis]:
+    #     if len(vdict['Test'])> 0 :
+    #         res.append(vdict)
+    #         plot(save_dir, 'converg', num, vdict['Train'], vdict['Dev'], vdict['Test'])
+
+    # save statistics to file
+    stat_dir = os.path.join(save_dir, str(num)+'statistics'+'.json')
+    with open(stat_dir, 'w') as f:
+        json.dump(stats, f)
+        f.close()
 
     end_model = datetime.datetime.now()
     logging.info('this model runtime: %s' % str(end_model - start_model))

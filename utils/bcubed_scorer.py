@@ -19,6 +19,11 @@ def mult_precision(el1, el2, cdict, ldict):
 
 def mult_recall(el1, el2, cdict, ldict):
     """Computes the multiplicity recall for two elements."""
+    # res = min(len(cdict[el1] & cdict[el2]),
+    #            len(ldict[el1] & ldict[el2])) / float(
+    #                len(ldict[el1] & ldict[el2]))
+    # # print(res)
+    # return res
     return min(len(cdict[el1] & cdict[el2]),
                len(ldict[el1] & ldict[el2])) / float(
                    len(ldict[el1] & ldict[el2]))
@@ -56,6 +61,7 @@ def bcubed(gold_lst, predicted_lst):
     """
     #gold list: label list
     gold = {i: {cluster} for i, cluster in enumerate(gold_lst)}
+    # print("#####", type(gold),len(gold), gold)
     pred = {i: {cluster} for i, cluster in enumerate(predicted_lst)}
     p = precision(pred, gold)
     r = recall(pred, gold)
