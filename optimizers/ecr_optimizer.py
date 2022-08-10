@@ -18,8 +18,12 @@ class GAEOptimizer(object):
         self.beta = args.beta
         self.gamma = args.gamma
 
-        loss = {0:self.loss_function_gae, 1:self.loss_function_gae1, 2:self.loss_function_gae2, 3:self.loss_function_gae3, 4:self.loss_function_gae4}
-        self.loss_fn = loss[args.loss_type]
+        if args.encoder=='gae':
+            loss = {0:self.loss_function_gae, 1:self.loss_function_gae1, 2:self.loss_function_gae2, 3:self.loss_function_gae3, 4:self.loss_function_gae4}
+            self.loss_fn = loss[args.loss_type]
+        else:
+            print('gvae loss')
+            self.loss_fn = self.loss_function_gvae
         self.use_cuda = use_cuda
         self.device = torch.device("cuda" if self.use_cuda else "cpu")
         self.valid_freq = args.valid_freq
@@ -30,7 +34,7 @@ class GAEOptimizer(object):
 
     def loss_function_gvae(self, preds, orig, mu, logvar, split='Train'):
         """GVAE"""
-        cost = self.norm * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
+        cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
 
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
@@ -42,7 +46,7 @@ class GAEOptimizer(object):
 
     def loss_function_gvae1(self, preds, orig, mu, logvar, split='Train'):
         """L = CE + nuclear_norm"""
-        cost = self.norm * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
+        cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
 
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014

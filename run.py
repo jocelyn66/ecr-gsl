@@ -80,7 +80,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     # dataset###############
     dataset = GDataset(args)
     for split in ['Train', 'Dev', 'Test']:
-        assert(dataset.adjacency[split].diagonal(offset=0, axis1=0, axis2=1).all()==1)
+        assert(dataset.adjacency[split].diagonal(offset=0, axis1=0, axis2=1).all()==0)
 
     args.n_nodes = dataset.n_nodes
 
@@ -401,31 +401,14 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     # torch.save(model.cpu().state_dict(), model_path)
 
     plot(save_dir, 'converg', num, losses['Train'], losses['Dev'], losses['Test'])
-    plot_splits(save_dir, 'b3_r_0.95', num, stats['b3_r_0.95'])
-    plot_splits(save_dir, 'b3_p_0.95', num, stats['b3_p_0.95'])
-    plot_splits(save_dir, 'b3_f_0.95', num, stats['b3_f_0.95'])
-    plot_splits(save_dir, 'b3_r_0.9', num, stats['b3_r_0.9'])
-    plot_splits(save_dir, 'b3_p_0.9', num, stats['b3_p_0.9'])
-    plot_splits(save_dir, 'b3_f_0.9', num, stats['b3_f_0.9'])
-    plot_splits(save_dir, 'b3_r_0.85', num, stats['b3_r_0.85'])
-    plot_splits(save_dir, 'b3_p_0.85', num, stats['b3_p_0.85'])
-    plot_splits(save_dir, 'b3_f_0.85', num, stats['b3_f_0.85'])
-    plot_splits(save_dir, 'nmi_0.95', num, stats['nmi_0.95'])
-    plot_splits(save_dir, 'nmi_0.9', num, stats['nmi_0.9'])
-    plot_splits(save_dir, 'nmi_0.85', num, stats['nmi_0.85'])
 
-    plot_splits(save_dir, 'ent_b3_r_0.95', num, stats['ent_b3_r_0.95'])
-    plot_splits(save_dir, 'ent_b3_p_0.95', num, stats['ent_b3_p_0.95'])
-    plot_splits(save_dir, 'ent_b3_f_0.95', num, stats['ent_b3_f_0.95'])
-    plot_splits(save_dir, 'ent_b3_r_0.9', num, stats['ent_b3_r_0.9'])
-    plot_splits(save_dir, 'ent_b3_p_0.9', num, stats['ent_b3_p_0.9'])
-    plot_splits(save_dir, 'ent_b3_f_0.9', num, stats['ent_b3_f_0.9'])
-    plot_splits(save_dir, 'ent_b3_r_0.85', num, stats['ent_b3_r_0.85'])
-    plot_splits(save_dir, 'ent_b3_p_0.85', num, stats['ent_b3_p_0.85'])
-    plot_splits(save_dir, 'ent_b3_f_0.85', num, stats['ent_b3_f_0.85'])
-    plot_splits(save_dir, 'ent_nmi_0.95', num, stats['ent_nmi_0.95'])
-    plot_splits(save_dir, 'ent_nmi_0.9', num, stats['ent_nmi_0.9'])
-    plot_splits(save_dir, 'ent_nmi_0.85', num, stats['ent_nmi_0.85'])
+    str_metrics = ['b3_r','b3_p','b3_f','nmi']
+    str_threshs = ['0.95','0.9','0.85']
+    descrips = itertools.product(str_metrics, str_threshs)
+    for des in descrips:
+        s = des[0] + '_' + des[1]
+        plot_splits(save_dir, s, num, stats[s])
+        plot_splits(save_dir, 'ent_'+s, num, stats['ent_'+s])
     # plot1(save_dir, 'converg', num, losses['Train'])
 
     # # save statistics to file

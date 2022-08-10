@@ -23,7 +23,6 @@ class GraphConvolution(Module):
         torch.nn.init.xavier_uniform_(self.weight)
 
     def forward(self, input, adj):
-        
         input = F.dropout(input, self.dropout, self.training)
         support = torch.mm(input, self.weight)
         output = torch.spmm(adj, support)

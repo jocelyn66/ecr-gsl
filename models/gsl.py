@@ -22,7 +22,7 @@ class GCNModelVAE(nn.Module):
             eps = torch.randn_like(std)  # N(0, 1)
             return eps.mul(std).add_(mu)
         else:
-            return mu # ?
+            return mu
 
     def forward(self, x, adj):
         mu, logvar = self.encode(x, adj)

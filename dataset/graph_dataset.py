@@ -22,7 +22,7 @@ class GDataset(object):
         self.entity_chain_dict = {'Train':{}, 'Dev':{}, 'Test':{}}  
         self.event_chain_list = {'Train':[], 'Dev':[], 'Test':[]}
         self.entity_chain_list = {'Train':[], 'Dev':[], 'Test':[]}  #按照节点编号的coref标签(index化了)list
-        self.adjacency = {}  # 邻接矩阵, 节点:event mention(trigger), entity mention, 边:0./1.,对角线0,句子关系,文档关系
+        self.adjacency = {}  # 邻接矩阵, 节点:event mention(trigger), entity mention, 边:0./1.,对角线0,句子关系,文档关系,共指关系
         self.event_coref_adj = {}  # 节点:event mention, 边: 共指关系(成立:1), 对角线1(但不用作label)
         self.entity_coref_adj = {}
         self.n_nodes = {}
@@ -43,33 +43,35 @@ class GDataset(object):
             self.entity_idx[split] = list(set(range(self.n_nodes[split])) - set(self.event_idx[split]))
 
         #refine+后处理
-        for split in ['Train', 'Dev']:
+        for split in ['Train']:
             #refine adj:加coref关系，对角线将为1
             self.refine_adj_by_event_coref(split)
             self.refine_adj_by_entity_coref(split)
-        self.adjacency['Test'][np.diag_indices_from(self.adjacency['Test'])] = 1
+            adj = self.adjacency[split] 
+            self.adjacency[split] = np.where((adj+adj.T)>0, 1, 0)  
 
         #event, entity coref
         for split in ['Train', 'Dev', 'Test']:
-
-            #event
-            # 
-            
             self.event_chain_list[split] = self.get_event_coref_list(split)
-
-            #entity
-            # 
-            
             self.entity_chain_list[split] = self.get_entity_coref_list(split)
 
-            if split == 'Test':
-                continue
+        for split in ['Train']:
             self.event_coref_adj[split] = self.adjacency[split][self.event_idx[split], :][:, self.event_idx[split]]
             self.entity_coref_adj[split] = self.adjacency[split][self.entity_idx[split], :][:, self.entity_idx[split]]
 
-        self.event_coref_adj['Test'] = self.get_coref_adj(self.event_chain_dict['Test'], self.event_idx['Test'], 'Test')  # bool矩阵, 对角线1
-        self.entity_coref_adj['Test'] = self.get_coref_adj(self.entity_chain_dict['Test'], self.entity_idx['Test'], 'Test')
+        for split in ['Dev', 'Test']:
+            self.event_coref_adj[split] = self.get_coref_adj(self.event_chain_dict[split], self.event_idx[split], split)  # bool矩阵, 对角线1
+            self.entity_coref_adj[split] = self.get_coref_adj(self.entity_chain_dict[split], self.entity_idx[split], split)
 
+        #对角线为0
+        for split in ['Train', 'Dev', 'Test']:
+            self.adjacency[split][np.diag_indices_from(self.adjacency[split])] = 0
+        
+        for split in ['Train', 'Dev', 'Test']:
+            print("check", split)
+            assert np.allclose(self.adjacency[split], self.adjacency[split], atol=1e-8)
+            assert np.allclose(self.event_coref_adj[split],self.event_coref_adj[split].T,atol=1e-8)
+            assert np.allclose(self.entity_coref_adj[split],self.entity_coref_adj[split].T,atol=1e-8)
         # print("check dataset########")
         # # 检查
         # for split in ['Train', 'Dev', 'Test']:
@@ -153,8 +155,8 @@ class GDataset(object):
             sent_node_idx = []
 
         # constraint: 对称，对角线0
-        adj = np.where((adj + adj.T)>0, 1., 0.)
-        adj[np.diag_indices_from(adj)] = 0
+        adj = np.where((adj + adj.T)>0, 1, 0)
+        # adj[np.diag_indices_from(adj)] = 0
         return adj
         
     def get_event_node_idx(self, descrip):
@@ -206,15 +208,22 @@ class GDataset(object):
         #将(event, event)设置为0
         #遍历coref dict加边
 
+        mask = itertools.product(self.event_idx[split], self.event_idx[split])
+        rows, cols = zip(*mask)
+        self.adjacency[split][rows, cols] = 0
+
         for key in self.event_chain_dict[split]:
             events = self.event_chain_dict[split][key]
-
             mask = itertools.product(events, events)
             rows, cols = zip(*mask)
             self.adjacency[split][rows, cols] = 1
 
     def refine_adj_by_entity_coref(self, split):
         
+        mask = itertools.product(self.entity_idx[split], self.entity_idx[split])
+        rows, cols = zip(*mask)
+        self.adjacency[split][rows, cols] = 0
+
         for key in self.entity_chain_dict[split]:
             entitis = self.entity_chain_dict[split][key]
 
