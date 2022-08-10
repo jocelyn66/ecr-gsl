@@ -79,6 +79,9 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
 
     # dataset###############
     dataset = GDataset(args)
+    for split in ['Train', 'Dev', 'Test']:
+        assert(dataset.adjacency[split].diagonal(offset=0, axis1=0, axis2=1).all()==1)
+
     args.n_nodes = dataset.n_nodes
 
     # for split in ['Train', 'Dev', 'Test']:
@@ -91,6 +94,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     adj_norm = {}
     
     for split in ['Train', 'Dev', 'Test']:
+        
         if not args.double_precision:
             dataset.adjacency[split] = dataset.adjacency[split].astype(np.float32)
         adj = dataset.adjacency[split]
@@ -107,6 +111,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     recover_true_sub_indices = {}
     recover_false_sub_indices = {}
 
+    #重构label不取对角线
     for split in ['Train', 'Dev', 'Test']:
         event_true_sub_indices[split], event_false_sub_indices[split] = get_examples_indices(dataset.event_coref_adj[split])
         # entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
@@ -243,6 +248,8 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
             
             for threshold in [0.95, 0.9, 0.85]:
                 # eval_model_leiden of eval_model_louvain
+                #event
+                logging.info("\t\tevent coref:")
                 pred_list, n_comm, n_edges = eval_model_leiden(save_dir, 'Train', hidden_emb, dataset.event_idx['Train'], threshold, num)
                 logging.info("\t\tthreshold={}, n_edges={}".format(threshold, n_edges))
                 logging.info("\t\t\tlouvain: n_community = {}".format(n_comm))
@@ -260,6 +267,20 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
                 # logging.info("\t\tleiden: n_community = {}".format(n_comm2))
                 # eval_metrics2 = bcubed(dataset.event_chain_list[split], pred_list2)
                 # logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics2))
+
+                logging.info("\t\tentity coref:")
+                pred_list, n_comm, n_edges = eval_model_leiden(save_dir, 'Train', hidden_emb, dataset.entity_idx['Train'], threshold, num)
+                logging.info("\t\tthreshold={}, n_edges={}".format(threshold, n_edges))
+                logging.info("\t\t\tlouvain: n_community = {}".format(n_comm))
+                
+                eval_metrics = bcubed(dataset.entity_chain_list['Train'], pred_list)
+                nmi_metric = cal_nmi(dataset.entity_chain_list['Train'], pred_list)
+                logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
+                logging.info("\t\t\tnmi={:.5f}".format(nmi_metric))
+                add_new_item(stats, 'ent_b3_r_'+str(threshold), eval_metrics[0], 'Train')
+                add_new_item(stats, 'ent_b3_p_'+str(threshold), eval_metrics[1], 'Train')
+                add_new_item(stats, 'ent_b3_f_'+str(threshold), eval_metrics[2], 'Train')
+                add_new_item(stats,'ent_nmi_'+str(threshold), nmi_metric, 'Train')
 
             for split in ['Dev', 'Test']:
                 test_loss, test_mu = optimizer.eval(datasets[split], adj_norm[split], dataset.adjacency[split], split)  # norm adj
@@ -284,6 +305,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
                 # logging.info("B3 Evaluation in {}:".format(split))
                 for threshold in [0.95, 0.9, 0.85]:
                     # eval_model_leiden of eval_model_louvain
+                    logging.info("\t\tevent coref:")
                     pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
                     logging.info("\t\t{}, n_edges={}".format(threshold, n_edges))
                     logging.info("\t\tlouvain: n_community = {}".format(n_comm))
@@ -301,6 +323,20 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
                     # logging.info("\t\tleiden: n_community = {}".format(n_comm2))
                     # eval_metrics2 = bcubed(dataset.event_chain_list[split], pred_list2)
                     # logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics2))
+
+                    logging.info("\t\tentity coref:")
+                    pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.entity_idx[split], threshold, num)
+                    logging.info("\t\tthreshold={}, n_edges={}".format(threshold, n_edges))
+                    logging.info("\t\t\tlouvain: n_community = {}".format(n_comm))
+                    
+                    eval_metrics = bcubed(dataset.entity_chain_list[split], pred_list)
+                    nmi_metric = cal_nmi(dataset.entity_chain_list[split], pred_list)
+                    logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
+                    logging.info("\t\t\tnmi={:.5f}".format(nmi_metric))
+                    add_new_item(stats, 'ent_b3_r_'+str(threshold), eval_metrics[0], split)
+                    add_new_item(stats, 'ent_b3_p_'+str(threshold), eval_metrics[1], split)
+                    add_new_item(stats, 'ent_b3_f_'+str(threshold), eval_metrics[2], split)
+                    add_new_item(stats,'ent_nmi_'+str(threshold), nmi_metric, split)
 
         logging.info("\t\ttime={:.5f}".format(time.time() - t))
         # # 有监督
@@ -375,8 +411,21 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     plot_splits(save_dir, 'b3_p_0.85', num, stats['b3_p_0.85'])
     plot_splits(save_dir, 'b3_f_0.85', num, stats['b3_f_0.85'])
     plot_splits(save_dir, 'nmi_0.95', num, stats['nmi_0.95'])
-    plot_splits(save_dir, 'nmi_0.95', num, stats['nmi_0.9'])
-    plot_splits(save_dir, 'nmi_0.95', num, stats['nmi_0.85'])
+    plot_splits(save_dir, 'nmi_0.9', num, stats['nmi_0.9'])
+    plot_splits(save_dir, 'nmi_0.85', num, stats['nmi_0.85'])
+
+    plot_splits(save_dir, 'ent_b3_r_0.95', num, stats['ent_b3_r_0.95'])
+    plot_splits(save_dir, 'ent_b3_p_0.95', num, stats['ent_b3_p_0.95'])
+    plot_splits(save_dir, 'ent_b3_f_0.95', num, stats['ent_b3_f_0.95'])
+    plot_splits(save_dir, 'ent_b3_r_0.9', num, stats['ent_b3_r_0.9'])
+    plot_splits(save_dir, 'ent_b3_p_0.9', num, stats['ent_b3_p_0.9'])
+    plot_splits(save_dir, 'ent_b3_f_0.9', num, stats['ent_b3_f_0.9'])
+    plot_splits(save_dir, 'ent_b3_r_0.85', num, stats['ent_b3_r_0.85'])
+    plot_splits(save_dir, 'ent_b3_p_0.85', num, stats['ent_b3_p_0.85'])
+    plot_splits(save_dir, 'ent_b3_f_0.85', num, stats['ent_b3_f_0.85'])
+    plot_splits(save_dir, 'ent_nmi_0.95', num, stats['ent_nmi_0.95'])
+    plot_splits(save_dir, 'ent_nmi_0.9', num, stats['ent_nmi_0.9'])
+    plot_splits(save_dir, 'ent_nmi_0.85', num, stats['ent_nmi_0.85'])
     # plot1(save_dir, 'converg', num, losses['Train'])
 
     # # save statistics to file
