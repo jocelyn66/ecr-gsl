@@ -1,7 +1,7 @@
 import numpy as np
 from config import parser
 
-np.random.seed(parser.seed)
+np.random.seed(11)
 
 search_size = 10
 rs_tunes = 'learning_rate,rand_node_rate,beta,alpha,gamma'

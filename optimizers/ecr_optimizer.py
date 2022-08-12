@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import random
 from utils.name2object import *
+import itertools
 
 from torch import nn
 from utils.train import get_norm_of_matrix, normalize_adjacency
@@ -34,13 +35,14 @@ class GAEOptimizer(object):
 
     def loss_function_gvae(self, preds, orig, mu, logvar, split='Train'):
         """GVAE"""
-        cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
+        # cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
+        cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig)
 
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
         # https://arxiv.org/abs/1312.6114
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = -0.5 / self.n_nodes * torch.mean(torch.sum(
+        KLD = -0.5 / self.n_nodes[split] * torch.mean(torch.sum(
             1 + 2 * logvar - mu.pow(2) - logvar.exp().pow(2), 1))
         return cost + KLD
 
@@ -52,7 +54,7 @@ class GAEOptimizer(object):
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
         # https://arxiv.org/abs/1312.6114
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = -0.5 / self.n_nodes * torch.mean(torch.sum(
+        KLD = -0.5 / self.n_nodes[split] * torch.mean(torch.sum(
             1 + 2 * logvar - mu.pow(2) - logvar.exp().pow(2), 1))
 
         nuclear_norm = torch.linalg.norm(preds, ord='nuc')
@@ -62,11 +64,9 @@ class GAEOptimizer(object):
     def loss_function_gae(self, preds, orig, mu, logvar, split='Train'):
         """GAE"""
         cost = self.norm[split] * F.binary_cross_entropy_with_logits(preds, orig, pos_weight=self.pos_weight[split])
-
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        print("loss2:", BinaryCrossEntropy(preds, orig))
+        print("F loss:", F.binary_cross_entropy_with_logits(preds, orig))
+        
         return cost
 
     def loss_function_gae1(self, preds, orig, mu, logvar, split='Train'):
@@ -190,3 +190,32 @@ class GAEOptimizer(object):
             loss = self.loss_fn(preds=recovered, orig=orig_, mu=mu, logvar=logvar, split=split)
         return loss.item(), mu
         # return 0, mu
+
+
+def BinaryCrossEntropy(y_pred, y_true, event_idx=None, entity_idx=None, tol=1e-7):
+    # 三种边:事件共指,实体共指,其他;三类总权重一样
+
+    y_pred = torch.clip(y_pred, tol, 1 - tol)
+    terms = (1-y_true) * torch.log(1-y_pred) + y_true * torch.log(y_pred)
+    # terms = (1-y_true) * torch.log(1-y_pred + tol) + y_true * torch.log(y_pred - tol)
+    print(terms.shape)
+    if event_idx is None:
+        return - torch.mean(terms)
+    
+    print("weighted loss")
+
+    idx = itertools.product(event_idx, event_idx)
+    n_event_pair = len(event_idx)*len(event_idx)
+    rows, cols = zip(*idx)
+    term1 = torch.sum(terms[rows, cols])
+
+    idx = itertools.product(entity_idx, entity_idx)
+    n_entity_pair = len(entity_idx)*len(entity_idx)
+    rows, cols = zip(*idx)
+    term2 = torch.sum(terms[rows, cols])
+
+    m = y_true.shape[0] * y_true.shape[0] - n_event_pair - n_entity_pair
+
+    term3 = torch.sum(terms) - term1 - term2
+    
+    return - term1/n_event_pair - term2/n_entity_pair - term3/m  # /3?

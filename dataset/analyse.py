@@ -160,5 +160,38 @@ def main():
     check_coref_overlap(test_path, train_schema, 'Test')
 
 
+def count_coref():
+    #
+        for split in ['Train', 'Dev', 'Test']:
+            coref_num = 0
+            count = 0  
+            single_num = 0 
+
+            for key in self.event_chain_dict[split]:
+                events = self.event_chain_dict[split][key]
+                coref_num += len(events)*len(events)
+                count += len(events)
+                if len(events)==1:
+                    single_num += 1
+
+            print('n_event_coref pair:', coref_num-count)
+            print('single_event', single_num)
+
+            coref_num = 0
+            count = 0 
+            single_num = 0 
+
+            for key in self.entity_chain_dict[split]:
+                events = self.entity_chain_dict[split][key]
+                coref_num += len(events)*len(events)
+                count += len(events)
+                if len(events)==1:
+                    single_num += 1
+
+            print('n_entity_coref pair:', coref_num-count)
+            print('single_entity', single_num)
+
 if __name__ == "__main__":
     main()
+
+

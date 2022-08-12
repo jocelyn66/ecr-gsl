@@ -68,29 +68,9 @@ class GDataset(object):
             self.adjacency[split][np.diag_indices_from(self.adjacency[split])] = 0
         
         for split in ['Train', 'Dev', 'Test']:
-            print("check", split)
             assert np.allclose(self.adjacency[split], self.adjacency[split], atol=1e-8)
             assert np.allclose(self.event_coref_adj[split],self.event_coref_adj[split].T,atol=1e-8)
             assert np.allclose(self.entity_coref_adj[split],self.entity_coref_adj[split].T,atol=1e-8)
-        # print("check dataset########")
-        # # 检查
-        # for split in ['Train', 'Dev', 'Test']:
-        #     print("#####",split)
-        #     print("##adj")
-
-        #     # print(self.adjacency[split].shape, self.adjacency[split])
-        #     # print(self.event_coref_adj[split].shape)
-        #     # print(self.entity_coref_adj[split].shape, self.entity_coref_adj[split])
-            
-        #     # print("##idx")
-        #     # print(len(self.event_idx[split]))
-        #     # print(len(self.entity_idx[split]))
-
-        #     # print("##coref")
-        #     # print(len(self.entity_chain_dict[split]), self.entity_chain_dict[split])
-        #     # print(len(self.entity_chain_dict[split]), self.entity_chain_dict[split])
-        #     # print(len(self.entity_chain_list[split]), self.entity_chain_list[split])
-        #     # print(len(self.event_chain_list[split]), self.event_chain_list[split])
 
     def get_schema(self, path, split=''):
         # chain的schema, item：(chain descrip, id)
