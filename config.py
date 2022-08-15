@@ -68,6 +68,7 @@ parser.add_argument('--tokenizer_name', type=str, default='bert-base-uncased')
 parser.add_argument('--plm_name', type=str, default='bert-base-uncased')
 parser.add_argument('--feat_dim', type=int, default=768, 
                     help='size of features, i.e. bert embedding dim')
+parser.add_argument("--fine-tune", action='store_true')
 # encoder config#####################
 parser.add_argument('--rand-node-rate', type=float, default=0.2)
 parser.add_argument("--encoder", type=str, choices = ['gae', 'gvae'], default='gae',
@@ -84,5 +85,3 @@ parser.add_argument("--decoder", type=str, default='')  #无用
 # parser.add_argument('--threshold', type=float, default=0.5)
 
 parser = parser.parse_args()
-
-

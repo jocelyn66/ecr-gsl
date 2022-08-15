@@ -29,3 +29,6 @@ utils/__pycache__/name2object.cpython-37.pyc
 utils/__pycache__/evaluate.cpython-37.pyc
 utils/__pycache__/visual.cpython-37.pyc
 utils/__pycache__/bcubed_scorer.cpython-37.pyc
+models/__pycache__/feature.cpython-37.pyc
+run.sh
+run.sh

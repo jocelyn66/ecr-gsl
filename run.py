@@ -20,6 +20,8 @@ from utils.eval import *
 from utils.visual import *
 from dataset.dataset_process import preprocess_function
 from models.clustring import *
+from models.ecr_model import ECRModel, ECRModel_fine_tune
+from models.feature import *
 
 from dataset.graph_dataset import GDataset, get_examples_indices
 from datasets import load_dataset
@@ -167,17 +169,27 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
         cache_file_name = args.test_cache_file
     )
 
-    datasets = {'Dev':dev_dataset, 'Test':test_dataset}
+    dataset_list = {'Train':train_dataset, 'Dev':dev_dataset, 'Test':test_dataset}
     ######################
 
     # create 
     use_cuda = torch.cuda.is_available()
     if not use_cuda:
         ValueError("WARNING: CUDA is not available!")
-  
     torch.cuda.manual_seed(args.seed)
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
     args.device = torch.device("cuda" if use_cuda else "cpu")
+
+    #get features
+    features_list = get_bert_features(plm, dataset_list, args.device)
+    for split in ['Train', 'Dev', 'Test']:
+    #     torch.save(features_list[split], os.path.join(save_dir, 'bert_features_{}.pt'.format(split)))
+        features_list[split] = features_list[split].to('cpu')
+    print(torch.cuda.memory_summary())
+    torch.cuda.empty_cache()
+    for split in ['Train', 'Dev', 'Test']:
+        features_list[split] = features_list[split].to(args.device)
+    print(torch.cuda.memory_summary())
 
     # adj_train = torch.tensor(adj_train, device=args.device)
     # adj_norm = torch.tensor(adj_norm, device=args.device)
@@ -187,7 +199,10 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
         # adj_orig[split] = torch.tensor(dataset.adjacency[split], device=args.device)
         pos_weight[split] = torch.tensor(pos_weight[split], device=args.device)
 
-    model = getattr(models, name2model[args.model])(args, tokenizer, plm, schema_list, dataset.adjacency['Train'])
+    if args.fine_tune:
+        model = ECRModel_fine_tune(args, tokenizer, plm, schema_list)
+    else:
+        model = ECRModel(args)
     total = count_params(model)
     logging.info("Total number of parameters {}".format(total))
     model.to(args.device)    # GUP
@@ -217,17 +232,21 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
             if hasattr(torch.cuda, 'empty_cache'):
                 torch.cuda.empty_cache()
 
-        loss, mu = optimizer.epoch(train_dataset, adj_norm['Train'], dataset.adjacency['Train'])
+        # loss, mu = optimizer.epoch(train_dataset, adj_norm['Train'], dataset.adjacency['Train'])
+        loss, mu = optimizer.epoch(features_list['Train'], adj_norm['Train'], dataset.adjacency['Train'])
         losses['Train'].append(loss)
         logging.info("Epoch {} | ".format(epoch))
         logging.info("\tTrain")
         logging.info("\t\taverage train loss: {:.4f}".format(loss))
         if math.isnan(loss):
             break
+            
+        logging.info("\ttraining time={:.5f}".format(time.time() - t))
+        t = time.time()
 
         # valid training set
         hidden_emb = mu.data.detach().cpu().numpy()
-
+        
         model.eval()
 
         #AUC, AP###############
@@ -246,63 +265,31 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
         # 无监督
         if (epoch+1) % args.valid_freq == 0:
             
-            for threshold in [0.95, 0.9, 0.85]:
-                # eval_model_leiden of eval_model_louvain
-                #event
-                logging.info("\t\tevent coref:")
-                pred_list, n_comm, n_edges = eval_model_leiden(save_dir, 'Train', hidden_emb, dataset.event_idx['Train'], threshold, num)
-                logging.info("\t\tthreshold={}, n_edges={}".format(threshold, n_edges))
-                logging.info("\t\t\tlouvain: n_community = {}".format(n_comm))
-                
-                eval_metrics = bcubed(dataset.event_chain_list['Train'], pred_list)
-                nmi_metric = cal_nmi(dataset.event_chain_list['Train'], pred_list)
-                logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
-                logging.info("\t\t\tnmi={:.5f}".format(nmi_metric))
-                add_new_item(stats, 'b3_r_'+str(threshold), eval_metrics[0], 'Train')
-                add_new_item(stats, 'b3_p_'+str(threshold), eval_metrics[1], 'Train')
-                add_new_item(stats, 'b3_f_'+str(threshold), eval_metrics[2], 'Train')
-                add_new_item(stats,'nmi_'+str(threshold), nmi_metric, 'Train')
 
-                # pred_list2, n_comm2, n_edges2 = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
-                # logging.info("\t\tleiden: n_community = {}".format(n_comm2))
-                # eval_metrics2 = bcubed(dataset.event_chain_list[split], pred_list2)
-                # logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics2))
+            for split in ['Train', 'Dev', 'Test']:
 
-                logging.info("\t\tentity coref:")
-                pred_list, n_comm, n_edges = eval_model_leiden(save_dir, 'Train', hidden_emb, dataset.entity_idx['Train'], threshold, num)
-                logging.info("\t\tthreshold={}, n_edges={}".format(threshold, n_edges))
-                logging.info("\t\t\tlouvain: n_community = {}".format(n_comm))
-                
-                eval_metrics = bcubed(dataset.entity_chain_list['Train'], pred_list)
-                nmi_metric = cal_nmi(dataset.entity_chain_list['Train'], pred_list)
-                logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
-                logging.info("\t\t\tnmi={:.5f}".format(nmi_metric))
-                add_new_item(stats, 'ent_b3_r_'+str(threshold), eval_metrics[0], 'Train')
-                add_new_item(stats, 'ent_b3_p_'+str(threshold), eval_metrics[1], 'Train')
-                add_new_item(stats, 'ent_b3_f_'+str(threshold), eval_metrics[2], 'Train')
-                add_new_item(stats,'ent_nmi_'+str(threshold), nmi_metric, 'Train')
+                if split in ['Dev', 'Test']:
 
-            for split in ['Dev', 'Test']:
-                test_loss, test_mu = optimizer.eval(datasets[split], adj_norm[split], dataset.adjacency[split], split)  # norm adj
-                losses[split].append(test_loss)
-                logging.info("\t{}".format(split))
-                logging.info("\t\taverage {} loss: {:.4f}".format(split, test_loss))
+                    loss, mu = optimizer.eval(features_list[split], adj_norm[split], dataset.adjacency[split], split)  # norm adj
+                    losses[split].append(loss)
+                    logging.info("\t{}".format(split))
+                    logging.info("\t\taverage {} loss: {:.4f}".format(split, loss))
 
-                hidden_emb = test_mu.data.detach().cpu().numpy()
+                hidden_emb = mu.data.detach().cpu().numpy()
 
+                logging.info("\tEvaluate Link Prediction:")
                 #auc, ap: test event mention pair###########
-                # test_metrics1 = test_model(hidden_embs[split], dataset.event_idx[split], event_true_sub_indices[split], event_false_sub_indices[split])
-                # logging.info("\t\tevent coref:" + format_metrics(test_metrics1, split))
+                test_metrics1 = test_model(hidden_emb, dataset.event_idx[split], event_true_sub_indices[split], event_false_sub_indices[split])
+                logging.info("\t\tevent coref:" + format_metrics(test_metrics1, split))
 
-                # entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
-                # test_metrics2 = test_model(hidden_embs[split], entity_idx, entity_true_sub_indices[split], entity_false_sub_indices[split])
-                # logging.info("\t\tentity coref:" + format_metrics(test_metrics2, split))
+                test_metrics2 = test_model(hidden_emb, dataset.entity_idx[split], entity_true_sub_indices[split], entity_false_sub_indices[split])
+                logging.info("\t\tentity coref:" + format_metrics(test_metrics2, split))
 
-                # test_metrics3 = test_model(hidden_embs[split], list(range(args.n_nodes[split])), recover_true_sub_indices[split], recover_false_sub_indices[split])
-                # logging.info("\t\treconstruct adj:" + format_metrics(test_metrics3, split))
+                test_metrics3 = test_model(hidden_emb, list(range(args.n_nodes[split])), recover_true_sub_indices[split], recover_false_sub_indices[split])
+                logging.info("\t\treconstruct adj:" + format_metrics(test_metrics3, split))
 
                 #b3###########################
-                # logging.info("B3 Evaluation in {}:".format(split))
+                logging.info("\tB3 Evaluation in {}:".format(split))
                 for threshold in [0.95, 0.9, 0.85]:
                     # eval_model_leiden of eval_model_louvain
                     logging.info("\t\tevent coref:")
@@ -338,7 +325,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
                     add_new_item(stats, 'ent_b3_f_'+str(threshold), eval_metrics[2], split)
                     add_new_item(stats,'ent_nmi_'+str(threshold), nmi_metric, split)
 
-        logging.info("\t\ttime={:.5f}".format(time.time() - t))
+        logging.info("\t\tevaluation time={:.5f}".format(time.time() - t))
         # # 有监督
         # model.eval()
         # if (epoch + 1) % args.valid_freq == 0:
