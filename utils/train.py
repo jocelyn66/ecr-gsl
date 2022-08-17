@@ -4,6 +4,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np 
 import scipy.sparse as sp
+import torch.sparse as tsp
 
 LOG_DIR = '../logs/'
 
@@ -110,6 +111,25 @@ def add_new_item(dict, item, value, item2=None):
 #     dict[item].append(value)
 
 
+def preprocess_graph(adj):
+    adj = sp.coo_matrix(adj)
+    adj_ = adj + sp.eye(adj.shape[0])
+    rowsum = np.array(adj_.sum(1))
+    degree_mat_inv_sqrt = sp.diags(np.power(rowsum, -0.5).flatten())
+    adj_normalized = adj_.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt).tocoo() #csc_matrix -> coo
+    # return sparse_to_tuple(adj_normalized)
+    return sparse_mx_to_torch_sparse_tensor(adj_normalized)
+
+
+def preprocess_graph_sp_ts(adj):
+    adj_ = adj + sp.eye(adj.shape[0])
+    rowsum = np.array(adj_.sum(1))
+    degree_mat_inv_sqrt = sp.diags(np.power(rowsum, -0.5).flatten())
+    adj_normalized = adj_.dot(degree_mat_inv_sqrt).transpose().dot(degree_mat_inv_sqrt).tocoo() #csc_matrix -> coo
+    # return sparse_to_tuple(adj_normalized)
+    return sparse_mx_to_torch_sparse_tensor(adj_normalized)
+
+    
 def preprocess_adjacency(adj):
     # in: np.array
     adj_ = adj
@@ -174,3 +194,13 @@ def load_check_point(fname):
 
 def id_func(x):
     return x
+
+
+def sparse_mx_to_torch_sparse_tensor(sparse_mx):
+    """Convert a scipy sparse matrix to a torch sparse tensor."""
+    sparse_mx = sparse_mx.tocoo().astype(np.float32)
+    indices = torch.from_numpy(
+        np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
+    values = torch.from_numpy(sparse_mx.data)
+    shape = torch.Size(sparse_mx.shape)
+    return torch.sparse.Tensor(indices, values, shape)

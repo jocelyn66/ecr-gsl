@@ -1,6 +1,7 @@
 import torch.nn as nn
 from layers.gsl_layer import *
 from utils.train import id_func
+from torch_geometric.nn import GCNConv
 
 
 # GVAE
@@ -59,3 +60,48 @@ class InnerProductDecoder(nn.Module):
         z = F.dropout(z, self.dropout, training=self.training)
         adj = self.act(torch.mm(z, z.t()))
         return adj
+
+
+# GVAE
+class MyGVAE(nn.Module):
+    def __init__(self, input_feat_dim, hidden_dim1, hidden_dim2, dropout):
+        super(GCNModelVAE, self).__init__()
+        self.gc1 = GCNConv(input_feat_dim, hidden_dim1, cached=False, dropout=dropout)
+        self.gc2 = GCNConv(hidden_dim1, hidden_dim2, cached=False, dropout=dropout)
+        self.gc3 = GCNConv(hidden_dim1, hidden_dim2, cached=False, dropout=dropout)
+        self.dc = InnerProductDecoder(dropout, act=id_func)
+
+    def encode(self, x, adj, edge_weight):
+        hidden1 = F .relu(self.gc1(x, adj, edge_weight))
+        return self.gc2(hidden1, adj, edge_weight), self.gc3(hidden1, adj, edge_weight)
+
+    def reparameterize(self, mu, logvar):
+        if self.training:
+            std = torch.exp(logvar)
+            eps = torch.randn_like(std)  # N(0, 1)
+            return eps.mul(std).add_(mu)
+        else:
+            return mu
+
+    def forward(self, x, adj, edge_weight=None):
+        mu, logvar = self.encode(x, adj, edge_weight)
+        z = self.reparameterize(mu, logvar)
+        return self.dc(z), mu, logvar
+
+
+# GAE
+class MyGAE(nn.Module):
+    def __init__(self, input_feat_dim, hidden_dim1, hidden_dim2, dropout):
+        super(GCNModelAE, self).__init__()
+        self.gc1 = GCNConv(input_feat_dim, hidden_dim1, cached=False, dropout=dropout)
+        self.gc2 = GCNConv(hidden_dim1, hidden_dim2, cached=False, dropout=dropout)
+        self.dc = InnerProductDecoder(dropout, act=id_func)
+
+    def encode(self, x, adj, edge_weight):
+        hidden1 = F.relu(self.gc1(x, adj, edge_weight))
+        return self.gc2(hidden1, adj, edge_weight)
+
+    def forward(self, x, adj, edge_weight=None):
+        z = self.encode(x, adj, edge_weight)
+        return self.dc(z), z, None
+

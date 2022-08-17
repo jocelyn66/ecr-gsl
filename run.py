@@ -81,8 +81,8 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
 
     # dataset###############
     dataset = GDataset(args)
-    for split in ['Train', 'Dev', 'Test']:
-        assert(dataset.adjacency[split].diagonal(offset=0, axis1=0, axis2=1).all()==0)
+    # for split in ['Train', 'Dev', 'Test']:
+    #     assert(dataset.adjacency[split].diagonal(offset=0, axis1=0, axis2=1).all()==0)
 
     args.n_nodes = dataset.n_nodes
 
@@ -93,18 +93,30 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     # adj_norm = preprocess_adjacency(adj_train)
     pos_weight = {}
     norm = {}
-    adj_norm = {}
-    
+    # adj_norm = {}
+
     for split in ['Train', 'Dev', 'Test']:
         
         if not args.double_precision:
-            dataset.adjacency[split] = dataset.adjacency[split].astype(np.float32)
-        adj = dataset.adjacency[split]
-        adj_norm[split] = preprocess_adjacency(adj)
-        pos_weight[split] = float(adj.shape[0] * adj.shape[0] - adj.sum()) / adj.sum()
-        norm[split] = adj.shape[0] * adj.shape[0] / float((adj.shape[0] * adj.shape[0] - adj.sum()) * 2)
-        if not args.double_precision:
-            pos_weight[split] = pos_weight[split].astype(np.float32)
+            for split in ['Train']:
+                for s in ['sent', 'doc', 'event_coref', 'entity_coref']:
+                    dataset.adjacency[split][s] = dataset.adjacency[split][s].astype(np.float32)
+            for split in ['Dev', 'Test']:
+                for s in ['sent', 'doc']:
+                    dataset.adjacency[split][s] = dataset.adjacency[split][s].astype(np.float32)
+        # adj = dataset.adjacency[split]
+        # adj_norm[split] = preprocess_adjacency(adj)
+
+    # process train adj for loss cal
+    n_edges_dict = {}
+    #dtype?
+    adj_label = np.zeros((args.n_nodes['Train'], args.n_nodes['Train']))
+    for s in ['sent', 'doc', 'event_coref', 'entity_coref']:
+        adj_label = np.where(adj_label>0, adj_label, dataset.adjacency['Train'][s].toarray())
+        n_edges_dict[s] = dataset.adjacency['Train'][s].sum() - args.n_nodes['Train']
+    norm = adj_label.shape[0] * adj_label.shape[0] / float((adj_label.shape[0] * adj_label.shape[0] - adj_label.sum()) * 2)
+    pos_weight = float(adj_label.shape[0] * adj_label.shape[0] - adj_label.sum()) / adj_label.sum()
+    pos_weight = torch.tensor([pos_weight])
 
     event_true_sub_indices = {}
     event_false_sub_indices = {}
@@ -113,12 +125,19 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     recover_true_sub_indices = {}
     recover_false_sub_indices = {}
 
+    #process for lp eval
     #重构label不取对角线
     for split in ['Train', 'Dev', 'Test']:
-        event_true_sub_indices[split], event_false_sub_indices[split] = get_examples_indices(dataset.event_coref_adj[split])
-        # entity_idx = list(set(range(args.n_nodes[split])) - set(dataset.event_idx[split]))
-        entity_true_sub_indices[split], entity_false_sub_indices[split] = get_examples_indices(dataset.entity_coref_adj[split])
-        recover_true_sub_indices[split], recover_false_sub_indices[split] = get_examples_indices(dataset.adjacency[split])
+        if split in ['Train']:
+            adj = adj_label
+        else:
+            adj = dataset.adjacency[split]['doc']  #dev, test:句子 文档关系, 满足句子一定满足文档
+        event_true_sub_indices[split], event_false_sub_indices[split] = get_examples_indices(adj, dataset.event_idx[split])
+        entity_true_sub_indices[split], entity_false_sub_indices[split] = get_examples_indices(adj, dataset.entity_idx[split])
+        recover_true_sub_indices[split], recover_false_sub_indices[split] = get_examples_indices(adj, list(range(args.n_nodes[split])))
+
+    adj_label += np.eye(adj_label.shape[0], dtype=adj_label.dtype)
+    adj_label = torch.tensor(adj_label)
 
     #Load Schema
     with open(args.schema_path, 'r') as f:  #3个set的schema
@@ -185,19 +204,13 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     for split in ['Train', 'Dev', 'Test']:
     #     torch.save(features_list[split], os.path.join(save_dir, 'bert_features_{}.pt'.format(split)))
         features_list[split] = features_list[split].to('cpu')
-    print(torch.cuda.memory_summary())
     torch.cuda.empty_cache()
-    for split in ['Train', 'Dev', 'Test']:
-        features_list[split] = features_list[split].to(args.device)
-    print(torch.cuda.memory_summary())
 
-    # adj_train = torch.tensor(adj_train, device=args.device)
-    # adj_norm = torch.tensor(adj_norm, device=args.device)
-    # adj_orig = {}
-    for split in ['Train', 'Dev', 'Test']:
-        # adj_norm[split] = torch.tensor(adj_norm[split], device=args.device)
-        # adj_orig[split] = torch.tensor(dataset.adjacency[split], device=args.device)
-        pos_weight[split] = torch.tensor(pos_weight[split], device=args.device)
+    if use_cuda:
+        for split in ['Train', 'Dev', 'Test']:
+            features_list[split] = features_list[split].to(args.device)
+        adj_label = adj_label.to(args.device)
+        pos_weight = pos_weight.to(args.device)
 
     if args.fine_tune:
         model = ECRModel_fine_tune(args, tokenizer, plm, schema_list)
@@ -211,7 +224,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     # regularizer = None
     # if args.regularizer:
     #     regularizer = getattr(regularizers, args.regularizer)(args.reg)
-    optimizer = GAEOptimizer(args, model, optim_method, norm, pos_weight, use_cuda)
+    optimizer = GAEOptimizer(args, model, optim_method, use_cuda, dataset.adjacency['Train'], n_edges_dict, pos_weight)
 
     # start train######################################
     counter = 0
@@ -233,7 +246,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
                 torch.cuda.empty_cache()
 
         # loss, mu = optimizer.epoch(train_dataset, adj_norm['Train'], dataset.adjacency['Train'])
-        loss, mu = optimizer.epoch(features_list['Train'], adj_norm['Train'], dataset.adjacency['Train'])
+        loss, mu = optimizer.epoch(features_list['Train'], dataset.adjacency['Train'], adj_label, norm, pos_weight)
         losses['Train'].append(loss)
         logging.info("Epoch {} | ".format(epoch))
         logging.info("\tTrain")
@@ -265,12 +278,11 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
         # 无监督
         if (epoch+1) % args.valid_freq == 0:
             
-
             for split in ['Train', 'Dev', 'Test']:
 
                 if split in ['Dev', 'Test']:
 
-                    loss, mu = optimizer.eval(features_list[split], adj_norm[split], dataset.adjacency[split], split)  # norm adj
+                    loss, mu = optimizer.eval(features_list[split], dataset.adjacency[split])  # norm adj
                     losses[split].append(loss)
                     logging.info("\t{}".format(split))
                     logging.info("\t\taverage {} loss: {:.4f}".format(split, loss))

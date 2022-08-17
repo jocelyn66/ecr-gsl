@@ -4,7 +4,8 @@ from utils.name2object import name2gsl, name2init
 import models.gsl as gsls
 import tqdm
 import numpy as np
-from utils.train import normalize_adjacency, preprocess_adjacency
+from utils.train import preprocess_graph, preprocess_adjacency
+import scipy.sparse as sp
 
 
 class ECRModel_fine_tune(nn.Module):
@@ -12,6 +13,7 @@ class ECRModel_fine_tune(nn.Module):
     def __init__(self, args, tokenizer, plm_model, schema_list, orig_adj=None):
         super(ECRModel, self).__init__()
 
+        ValueError('wrong implementation')
         # bert
         self.tokenizer = tokenizer
         self.bert_encoder = plm_model
@@ -22,7 +24,7 @@ class ECRModel_fine_tune(nn.Module):
         self.gsl = getattr(gsls, name2gsl[args.encoder])(args.feat_dim, args.hidden1, args.hidden2, args.dropout)
         self.gsl_name = args.encoder
         self.device = args.device
-
+        
         # regularization
         self.loss_type = args.loss_type
         if self.loss_type in [2,3,4]:
@@ -95,6 +97,10 @@ class ECRModel(nn.Module):
         self.gsl_name = args.encoder
         self.device = args.device
 
+        #comb edges
+        self.w_adj = nn.Parameter(torch.zeros(4), requires_grad=True)
+        self.w_att = nn.Softmax(dim=0)
+
         # regularization
         self.loss_type = args.loss_type
         if self.loss_type in [2,3,4]:
@@ -111,7 +117,6 @@ class ECRModel(nn.Module):
             init_adj = preprocess_adjacency(init_adj)
             self.H = nn.Parameter(torch.tensor(init_adj), requires_grad=True)
 
-
     def rand_init(self, n_nodes, rand_rate=0.1):
         # 随机+对称
         mat = np.random.rand(n_nodes, n_nodes)
@@ -122,7 +127,34 @@ class ECRModel(nn.Module):
     def eye_init(self, n_nodes):
         return np.eye(n_nodes)
 
-    def forward(self, features, adj):
-        return self.gsl(features, adj)  # gae
+    def forward(self, features, adjs):
+        # dense -> 加权-> tsp -> forward
+        #features:fearture_list['Train']
+        #adj:dataset.adjecancy['Train'], sp arr
+        w_adj = self.w_att(self.w_adj)
+
+        comb_adj = torch.zeros(adjs['sent'].shape, device=self.device)
+        # comb_adj = (w_adj[0] * adjs['sent']).tocoo()
+        for i, s in enumerate(['sent', 'doc', 'event_coref', 'entity_coref']):
+            adj = torch.tensor(adjs[s].toarray(), device=self.device)
+            comb_adj += w_adj[i].repeat(adjs[s].shape) * adj
+        comb_adj = comb_adj.to_sparse().requires_grad_(True)
+        # comb_adj = preprocess_graph(comb_adj)
+        # comb_adj = comb_adj.to(self.device)
+        return self.gsl(features, comb_adj, comb_adj.coalesce().values())  # gae
     
+    def infer(self, features, adj):
+        #features:fearture_list['Dev']
+        #adj:dataset.adjecancy['Dev']
+        w_adj = self.w_att(self.w_adj)
+        w_sum = w_adj[0] + w_adj[1]
+
+        comb_adj = torch.zeros(adj['sent'].shape, device=self.device)
+        for i, s in enumerate(['sent', 'doc']):
+            adj = torch.tensor(adj[s].toarray(), device=self.device)
+            comb_adj += (w_adj[i]/w_sum).repeat(adj[s].shape) * adj
+        comb_adj = comb_adj.to_sparse()
+        # comb_adj = preprocess_graph(comb_adj)
+        # comb_adj = comb_adj.to(self.device)
+        return self.gsl(features, comb_adj, comb_adj.coalesce().values())
     

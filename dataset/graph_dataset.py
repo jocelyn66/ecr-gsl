@@ -1,8 +1,9 @@
 import itertools
 import numpy as np
 import json
+import torch
+import scipy.sparse as sp
 
-import numpy as np
 from utils.train import add_new_item
 
 DATA_PATH = './data/'
@@ -22,7 +23,9 @@ class GDataset(object):
         self.entity_chain_dict = {'Train':{}, 'Dev':{}, 'Test':{}}  
         self.event_chain_list = {'Train':[], 'Dev':[], 'Test':[]}
         self.entity_chain_list = {'Train':[], 'Dev':[], 'Test':[]}  #按照节点编号的coref标签(index化了)list
-        self.adjacency = {}  # 邻接矩阵, 节点:event mention(trigger), entity mention, 边:0./1.,对角线0,句子关系,文档关系,共指关系
+        self.adjacency = {'Train':{}, 'Dev':{}, 'Test':{}}  # sp array, {'Train':{'event_coref', 'entity_coref', 'doc', 'sent'}, 'Train':{'doc', 'sent'}, 'Train':{'doc', 'sent'}}
+        #邻接矩阵, 节点:event mention(trigger), entity mention
+        #边(0./1.,对角线0):事件共指,实体共指,句子关系,实体关系
         self.event_coref_adj = {}  # 节点:event mention, 边: 共指关系(成立:1), 对角线1(但不用作label)
         self.entity_coref_adj = {}
         self.n_nodes = {}
@@ -37,40 +40,39 @@ class GDataset(object):
             self.n_nodes[split] = self.n_events[split] + self.n_entities[split]
 
         file = {'Train': args.train_file, 'Dev': args.dev_file,'Test': args.test_file}
-        # self.event_coref_adj['Train'] = self.get_event_coref_adj('Train')
+        
+        #邻接矩阵:句子关系, 文档关系
         for split in ['Train', 'Dev', 'Test']:
-            self.adjacency[split] = self.get_adjacency(file[split], split)
+            self.get_adj_sent_doc_rel(file[split], split)
             self.entity_idx[split] = list(set(range(self.n_nodes[split])) - set(self.event_idx[split]))
 
-        #refine+后处理
+        #邻接矩阵:event共指,entity共指
         for split in ['Train']:
-            #refine adj:加coref关系，对角线将为1
-            self.refine_adj_by_event_coref(split)
-            self.refine_adj_by_entity_coref(split)
-            adj = self.adjacency[split] 
-            self.adjacency[split] = np.where((adj+adj.T)>0, 1, 0)  
+            self.get_adj_event_coref(split)
+            self.get_adj_entity_coref(split)
 
-        #event, entity coref
+        #event, entity coref list, for evaluation(b3...)
         for split in ['Train', 'Dev', 'Test']:
             self.event_chain_list[split] = self.get_event_coref_list(split)
             self.entity_chain_list[split] = self.get_entity_coref_list(split)
 
-        for split in ['Train']:
-            self.event_coref_adj[split] = self.adjacency[split][self.event_idx[split], :][:, self.event_idx[split]]
-            self.entity_coref_adj[split] = self.adjacency[split][self.entity_idx[split], :][:, self.entity_idx[split]]
+        # for split in ['Train']:
+        #     self.event_coref_adj[split] = self.adjacency[split][self.event_idx[split], :][:, self.event_idx[split]]
+        #     self.entity_coref_adj[split] = self.adjacency[split][self.entity_idx[split], :][:, self.entity_idx[split]]
 
-        for split in ['Dev', 'Test']:
-            self.event_coref_adj[split] = self.get_coref_adj(self.event_chain_dict[split], self.event_idx[split], split)  # bool矩阵, 对角线1
-            self.entity_coref_adj[split] = self.get_coref_adj(self.entity_chain_dict[split], self.entity_idx[split], split)
+        # for split in ['Dev', 'Test']:
+        #     self.event_coref_adj[split] = self.get_coref_adj(self.event_chain_dict[split], self.event_idx[split], split)  # bool矩阵, 对角线1
+        #     self.entity_coref_adj[split] = self.get_coref_adj(self.entity_chain_dict[split], self.entity_idx[split], split)
 
-        #对角线为0
-        for split in ['Train', 'Dev', 'Test']:
-            self.adjacency[split][np.diag_indices_from(self.adjacency[split])] = 0
+        # #对角线为0
+        # for split in ['Train', 'Dev', 'Test']:
+        #     self.adjacency[split][np.diag_indices_from(self.adjacency[split])] = 0
         
-        for split in ['Train', 'Dev', 'Test']:
-            assert np.allclose(self.adjacency[split], self.adjacency[split], atol=1e-8)
-            assert np.allclose(self.event_coref_adj[split],self.event_coref_adj[split].T,atol=1e-8)
-            assert np.allclose(self.entity_coref_adj[split],self.entity_coref_adj[split].T,atol=1e-8)
+        # #check对称
+        # for split in ['Train', 'Dev', 'Test']:
+        #     assert np.allclose(self.adjacency[split], self.adjacency[split].T, atol=1e-8)
+        #     assert np.allclose(self.event_coref_adj[split],self.event_coref_adj[split].T,atol=1e-8)
+        #     assert np.allclose(self.entity_coref_adj[split],self.entity_coref_adj[split].T,atol=1e-8)
 
     def get_schema(self, path, split=''):
         # chain的schema, item：(chain descrip, id)
@@ -210,48 +212,113 @@ class GDataset(object):
             mask = itertools.product(entitis, entitis)
             rows, cols = zip(*mask)
             self.adjacency[split][rows, cols] = 1
-    
+        
+    def get_adj_event_coref(self, split):
+        edges = []
+        for key in self.event_chain_dict[split]:
+            events = self.event_chain_dict[split][key]
+            mask = itertools.product(events, events)
+            edges.extend(list(mask))
 
-def get_examples_indices(target_adj):
-    # target_adj: indices x indices
+        row, col = zip(*edges)
+        values = np.ones(len(edges))  #type?
+        mx = sp.coo_matrix((values, (row, col)), shape=(self.n_nodes[split], self.n_nodes[split]))
+        self.adjacency[split]['event_coref'] = refine_adj(mx)
+
+    def get_adj_entity_coref(self, split):
+        edges = []
+        for key in self.entity_chain_dict[split]:
+            events = self.entity_chain_dict[split][key]
+            mask = itertools.product(events, events)
+            edges.extend(list(mask))
+
+        row, col = zip(*edges)
+        values = np.ones(len(edges))  #type?
+        mx = sp.coo_matrix((values, (row, col)), shape=(self.n_nodes[split], self.n_nodes[split]))
+        self.adjacency[split]['entity_coref'] = refine_adj(mx)
+
+    def get_adj_sent_doc_rel(self, path, split):
+
+        last_doc_id = ''
+        doc_node_idx = []
+        sent_node_idx = []
+        doc_row = []
+        doc_col = []
+        sent_row = []
+        sent_col = []
+        cur_idx = -1    # 从0开始顺序处理每个句子，对event chain, entity chain中的mention编号，根据mention出现的顺序
+        
+        with open(path, 'r') as f:
+            lines = f.readlines()
+        
+        for _, line in enumerate(lines):
+            sent = json.loads(line)
+
+            #文档关系
+            if last_doc_id != sent['doc_id']:
+                if len(doc_node_idx)>0:
+                    indices = itertools.product(doc_node_idx, doc_node_idx)
+                    row, col = zip(*indices)
+                    doc_row.extend(list(row))
+                    doc_col.extend(list(col))
+
+                last_doc_id = sent['doc_id']
+                doc_node_idx = []
+            
+            # event coref dict
+            for _, event in enumerate(sent['event_coref']):
+                cur_idx += 1
+                sent_node_idx.append(cur_idx)
+                self.event_idx[split].append(cur_idx)
+                add_new_item(self.event_chain_dict[split], event['coref_chain'], cur_idx)
+
+            # eneity coref dict
+            for _, entity in enumerate(sent['entity_coref']):
+                cur_idx += 1
+                sent_node_idx.append(cur_idx)
+                # self.entity_idx[split].append(cur_idx)
+                add_new_item(self.entity_chain_dict[split], entity['coref_chain'], cur_idx)
+            
+            # 句子关系
+            indices = itertools.product(sent_node_idx, sent_node_idx)
+            row, col = zip(*indices)
+            sent_row.extend(row)
+            sent_col.extend(col)
+            doc_node_idx.extend(sent_node_idx)
+            sent_node_idx = []
+
+        sent_mx = sp.coo_matrix((np.ones(len(sent_row)), (np.array(sent_row), np.array(sent_col))), shape=(self.n_nodes[split], self.n_nodes[split]))
+        doc_mx = sp.coo_matrix((np.ones(len(doc_row)), (doc_row, doc_col)), shape=(self.n_nodes[split], self.n_nodes[split]))
+
+        self.adjacency[split]['sent'] = refine_adj(sent_mx)
+        self.adjacency[split]['doc'] = refine_adj(doc_mx)
+
+
+def refine_adj(sp_mx):
+    #对称,对角线置为0
+    sp_mx = sp_mx + sp_mx.T
+    return (sp_mx - sp.eye(sp_mx.shape[0])).tocoo()
+
+
+def get_examples_indices(sp_mx, idx):
+    # func:for eval lp task, auc ap
     #不取对角线
-    
-    tri_target_adj = np.triu(target_adj, 1)
+    #sp_mx: sp mx or ndarray
+    #return: ([],[])
+    if sp.issparse(sp_mx):
+        adj = sp_mx.toarray()
+    else:
+        adj = sp_mx
+    adj = adj[idx, :][:, idx]
+    adj = np.triu(adj, 1)
+    true_edges = np.where(adj>0)
 
-    true_indices = np.where(tri_target_adj>0)
-
-    false_indices_all = np.where(tri_target_adj==0)
+    false_adj = np.tri(adj.shape[0], adj.shape[0], -1).T
+    false_adj = false_adj - adj
+    false_indices_all = np.where(false_adj>0)
     mask = np.arange(0, len(false_indices_all[0]))
     np.random.shuffle(mask)
-    false_indices = (false_indices_all[0][mask[:len(true_indices[0])]], false_indices_all[1][mask[:len(true_indices[0])]])
+    false_edges = (false_indices_all[0][mask[:len(true_edges[0])]], false_indices_all[1][mask[:len(true_edges[0])]])
 
-    assert len(true_indices[0]) == len(false_indices[0])
-    return true_indices, false_indices
-
-    # def ismember(a, b, tol=5):
-    #     rows_close = np.all(np.round(a - b[:, None], tol) == 0, axis=-1)
-    #     return np.any(rows_close)
-
-    # false_indices = []
-    # while len(false_indices) < len(true_indices):
-    #     idx_i = np.random.randint(0, target_adj.shape[0])
-    #     idx_j = np.random.randint(0, target_adj.shape[0])
-    #     if idx_i == idx_j:
-    #         continue
-    #     if idx_i > idx_j:
-    #         idx_i, idx_j = idx_j, idx_i
-    #     if ismember([idx_i, idx_j], true_indices):
-    #         continue
-    #     if false_indices:
-    #         if ismember([idx_i, idx_j], np.array(false_indices)):
-    #             continue
-    #     false_indices.append((idx_i, idx_j))
-
-    # false_indices_tup = zip(false_indices_ind[0], false_indices_ind[1])
-    # false_indices_list = list(false_indices_tup)
-    # print("####1", len(false_indices_list), false_indices_list[:10])
-    # np.random.shuffle(false_indices_list)
-    
-    # return true_indices, zip(*false_indices_list)
-    # return true_indices, false_indices
-    
+    assert len(true_edges[0]) == len(false_edges[0])
+    return true_edges, false_edges
