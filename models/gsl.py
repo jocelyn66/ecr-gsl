@@ -65,10 +65,10 @@ class InnerProductDecoder(nn.Module):
 # GVAE
 class MyGVAE(nn.Module):
     def __init__(self, input_feat_dim, hidden_dim1, hidden_dim2, dropout):
-        super(GCNModelVAE, self).__init__()
-        self.gc1 = GCNConv(input_feat_dim, hidden_dim1, cached=False, dropout=dropout)
-        self.gc2 = GCNConv(hidden_dim1, hidden_dim2, cached=False, dropout=dropout)
-        self.gc3 = GCNConv(hidden_dim1, hidden_dim2, cached=False, dropout=dropout)
+        super(MyGVAE, self).__init__()
+        self.gc1 = GCNConv(input_feat_dim, hidden_dim1, cached=False)
+        self.gc2 = GCNConv(hidden_dim1, hidden_dim2, cached=False)
+        self.gc3 = GCNConv(hidden_dim1, hidden_dim2, cached=False)
         self.dc = InnerProductDecoder(dropout, act=id_func)
 
     def encode(self, x, adj, edge_weight):
@@ -92,9 +92,9 @@ class MyGVAE(nn.Module):
 # GAE
 class MyGAE(nn.Module):
     def __init__(self, input_feat_dim, hidden_dim1, hidden_dim2, dropout):
-        super(GCNModelAE, self).__init__()
-        self.gc1 = GCNConv(input_feat_dim, hidden_dim1, cached=False, dropout=dropout)
-        self.gc2 = GCNConv(hidden_dim1, hidden_dim2, cached=False, dropout=dropout)
+        super(MyGAE, self).__init__()
+        self.gc1 = GCNConv(input_feat_dim, hidden_dim1, cached=False)
+        self.gc2 = GCNConv(hidden_dim1, hidden_dim2, cached=False)
         self.dc = InnerProductDecoder(dropout, act=id_func)
 
     def encode(self, x, adj, edge_weight):

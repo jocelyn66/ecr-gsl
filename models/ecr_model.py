@@ -13,7 +13,7 @@ class ECRModel_fine_tune(nn.Module):
     def __init__(self, args, tokenizer, plm_model, schema_list, orig_adj=None):
         super(ECRModel, self).__init__()
 
-        ValueError('wrong implementation')
+        ValueError('wrong implementation in ecr model with fine tune')
         # bert
         self.tokenizer = tokenizer
         self.bert_encoder = plm_model
@@ -132,6 +132,7 @@ class ECRModel(nn.Module):
         #features:fearture_list['Train']
         #adj:dataset.adjecancy['Train'], sp arr
         w_adj = self.w_att(self.w_adj)
+        print(w_adj)
 
         comb_adj = torch.zeros(adjs['sent'].shape, device=self.device)
         # comb_adj = (w_adj[0] * adjs['sent']).tocoo()
@@ -141,20 +142,21 @@ class ECRModel(nn.Module):
         comb_adj = comb_adj.to_sparse().requires_grad_(True)
         # comb_adj = preprocess_graph(comb_adj)
         # comb_adj = comb_adj.to(self.device)
-        return self.gsl(features, comb_adj, comb_adj.coalesce().values())  # gae
+        return self.gsl(features, comb_adj.indices(), comb_adj.coalesce().values())  # gae
     
     def infer(self, features, adj):
         #features:fearture_list['Dev']
         #adj:dataset.adjecancy['Dev']
         w_adj = self.w_att(self.w_adj)
         w_sum = w_adj[0] + w_adj[1]
+        w_adj = w_adj / w_sum.item()
 
         comb_adj = torch.zeros(adj['sent'].shape, device=self.device)
         for i, s in enumerate(['sent', 'doc']):
             adj = torch.tensor(adj[s].toarray(), device=self.device)
-            comb_adj += (w_adj[i]/w_sum).repeat(adj[s].shape) * adj
+            comb_adj += w_adj[i].repeat(adj[s].shape) * adj
         comb_adj = comb_adj.to_sparse()
         # comb_adj = preprocess_graph(comb_adj)
         # comb_adj = comb_adj.to(self.device)
-        return self.gsl(features, comb_adj, comb_adj.coalesce().values())
+        return self.gsl(features, comb_adj.indices(), comb_adj.coalesce().values())
     

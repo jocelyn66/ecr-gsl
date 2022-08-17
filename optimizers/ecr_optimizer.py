@@ -35,7 +35,9 @@ class GAEOptimizer(object):
         self.n_edges = n_edges
         # self.w_loss = nn.Parameter(torch.ones(args.n_nodes['Train'], args.n_nodes['Train']), requires_grad=False)
         # self.make_mask()
-        self.weighted_cost = nn.BCEWithLogitsLoss(weight=self.make_cost_mask(),reduction='sum',pos_weight=pos_weight)
+        w_loss = self.make_cost_mask()
+        w_loss = w_loss.to(self.device)
+        self.weighted_cost = nn.BCEWithLogitsLoss(weight=w_loss,reduction='sum',pos_weight=pos_weight)
 
     def make_mask(self):
         self.w_loss = self.w_loss / self.n_nodes['Train']
@@ -97,6 +99,7 @@ class GAEOptimizer(object):
 
     def weighted_loss_function_gae(self, preds, orig, mu, logvar, norm=1, pos_weight=None, split='Train'):
         """GAE"""
+        
         cost = norm * self.weighted_cost(preds, orig)
         
         return cost
