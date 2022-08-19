@@ -65,6 +65,9 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     if args.rand_search or args.grid_search:
         set_hp(args, hps)
 
+    if args.cls:
+        args.feat_dim = 2 * args.feat_dim
+
     if not (args.rand_search or args.grid_search):
         save_dir = set_logger(args)
         with open(os.path.join(save_dir, "config.json"), 'a') as fjson:
@@ -200,7 +203,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     args.device = torch.device("cuda" if use_cuda else "cpu")
 
     #get features
-    features_list = get_bert_features(plm, dataset_list, args.device)
+    features_list = get_bert_features(plm, dataset_list, args.device, args.win_w, args.win_len, args.win_max_pool,args.cls)
     for split in ['Train', 'Dev', 'Test']:
     #     torch.save(features_list[split], os.path.join(save_dir, 'bert_features_{}.pt'.format(split)))
         features_list[split] = features_list[split].to('cpu')
@@ -275,10 +278,10 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
 
         # B3###################
         # val#####################################
-        # 无监督
+        #任务测评
         if (epoch+1) % args.valid_freq == 0:
             
-            for split in ['Train', 'Dev', 'Test']:
+            for split in ['Train', 'Test']:
 
                 if split in ['Dev', 'Test']:
 
@@ -302,12 +305,12 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
 
                 #b3###########################
                 logging.info("\tB3 Evaluation in {}:".format(split))
-                for threshold in [0.95, 0.9, 0.85]:
+                for threshold in [0.95, 0.9]:
                     # eval_model_leiden of eval_model_louvain
                     logging.info("\t\tevent coref:")
                     pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.event_idx[split], threshold, num)
                     logging.info("\t\t{}, n_edges={}".format(threshold, n_edges))
-                    logging.info("\t\tlouvain: n_community = {}".format(n_comm))
+                    logging.info("\t\tleiden: n_community = {}".format(n_comm))
                     
                     eval_metrics = bcubed(dataset.event_chain_list[split], pred_list)
                     nmi_metric = cal_nmi(dataset.event_chain_list[split], pred_list)
@@ -323,19 +326,19 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
                     # eval_metrics2 = bcubed(dataset.event_chain_list[split], pred_list2)
                     # logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics2))
 
-                    logging.info("\t\tentity coref:")
-                    pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.entity_idx[split], threshold, num)
-                    logging.info("\t\tthreshold={}, n_edges={}".format(threshold, n_edges))
-                    logging.info("\t\t\tlouvain: n_community = {}".format(n_comm))
+                    # logging.info("\t\tentity coref:")
+                    # pred_list, n_comm, n_edges = eval_model_leiden(save_dir, split, hidden_emb, dataset.entity_idx[split], threshold, num)
+                    # logging.info("\t\tthreshold={}, n_edges={}".format(threshold, n_edges))
+                    # logging.info("\t\t\tleiden: n_community = {}".format(n_comm))
                     
-                    eval_metrics = bcubed(dataset.entity_chain_list[split], pred_list)
-                    nmi_metric = cal_nmi(dataset.entity_chain_list[split], pred_list)
-                    logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
-                    logging.info("\t\t\tnmi={:.5f}".format(nmi_metric))
-                    add_new_item(stats, 'ent_b3_r_'+str(threshold), eval_metrics[0], split)
-                    add_new_item(stats, 'ent_b3_p_'+str(threshold), eval_metrics[1], split)
-                    add_new_item(stats, 'ent_b3_f_'+str(threshold), eval_metrics[2], split)
-                    add_new_item(stats,'ent_nmi_'+str(threshold), nmi_metric, split)
+                    # eval_metrics = bcubed(dataset.entity_chain_list[split], pred_list)
+                    # nmi_metric = cal_nmi(dataset.entity_chain_list[split], pred_list)
+                    # logging.info("\t\t\tb3 metrics:" + format_b3_metrics(eval_metrics))
+                    # logging.info("\t\t\tnmi={:.5f}".format(nmi_metric))
+                    # add_new_item(stats, 'ent_b3_r_'+str(threshold), eval_metrics[0], split)
+                    # add_new_item(stats, 'ent_b3_p_'+str(threshold), eval_metrics[1], split)
+                    # add_new_item(stats, 'ent_b3_f_'+str(threshold), eval_metrics[2], split)
+                    # add_new_item(stats,'ent_nmi_'+str(threshold), nmi_metric, split)
 
         logging.info("\t\tevaluation time={:.5f}".format(time.time() - t))
         # # 有监督
@@ -402,7 +405,7 @@ def train(args, hps=None, set_hp=None, save_dir=None, num=-1, threshold=0.99):
     plot(save_dir, 'converg', num, losses['Train'], losses['Dev'], losses['Test'])
 
     str_metrics = ['b3_r','b3_p','b3_f','nmi']
-    str_threshs = ['0.95','0.9','0.85']
+    str_threshs = ['0.95','0.9']
     descrips = itertools.product(str_metrics, str_threshs)
     for des in descrips:
         s = des[0] + '_' + des[1]

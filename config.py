@@ -64,11 +64,16 @@ parser.add_argument("--grid-search", "--gs", action='store_true',
 # mdoel config
 parser.add_argument("--model", default="ecr-gsl",
                     help="ECR models")
-parser.add_argument('--tokenizer_name', type=str, default='bert-base-uncased')
-parser.add_argument('--plm_name', type=str, default='bert-base-uncased')
-parser.add_argument('--feat_dim', type=int, default=768, 
+parser.add_argument('--tokenizer-name', type=str, default='bert-base-uncased')
+parser.add_argument('--plm-name', type=str, default='bert-base-uncased')
+parser.add_argument('--feat-dim', type=int, default=768, 
                     help='size of features, i.e. bert embedding dim')
 parser.add_argument("--fine-tune", action='store_true')
+parser.add_argument("--cls", action='store_true', help='concat [CLS] embedding')
+parser.add_argument("--win-w", type=float, default=0., help='weight applyed to token out of span, w=1 for token in span')
+parser.add_argument("--win-len", type=int, default=0, help='')
+parser.add_argument("--win-max-pool", action='store_true', help='max pooling or mean pooling')
+
 # encoder config#####################
 parser.add_argument('--rand-node-rate', type=float, default=0.2)
 parser.add_argument("--encoder", type=str, choices = ['gae', 'gvae'], default='gae',

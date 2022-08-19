@@ -65,4 +65,10 @@ def preprocess_function(examples, tokenizer, args, schema_list, plm=None):
         output_entity.append(temp_ent)
         
     return {'input_ids':input_ids, 'input_mask':input_mask, 'input_doc':input_doc, 'input_sent':input_sent, 
-            'output_event':output_event, 'output_entity':output_entity}
+            'output_event':output_event, 'output_entity':output_entity}  
+            # 'input_ids':token_len * 1
+            # 'input_mask':input_mask: token_len * word_len, 
+            # 'input_doc':input_doc:一个id, 
+            # 'input_sent':input_sent:一个id, 
+            # 'output_event':output_event: 索引list的list, 对应的索引是word级别的
+            # 'output_entity':output_entity} :一个list, 对应的索引是word级别的

@@ -4,7 +4,7 @@ from utils.name2object import name2gsl, name2init
 import models.gsl as gsls
 import tqdm
 import numpy as np
-from utils.train import preprocess_graph, preprocess_adjacency
+from utils.train import preprocess_graph, preprocess_adjacency, id_func
 import scipy.sparse as sp
 
 
@@ -99,7 +99,10 @@ class ECRModel(nn.Module):
 
         #comb edges
         self.w_adj = nn.Parameter(torch.zeros(4), requires_grad=True)
-        self.w_att = nn.Softmax(dim=0)
+        self.w_act = nn.Softmax(dim=0)
+
+        # self.w_adj = nn.Parameter(torch.tensor([1.,1.,2.,2.]), requires_grad=False)  #?
+        # self.w_act = id_func
 
         # regularization
         self.loss_type = args.loss_type
@@ -131,7 +134,8 @@ class ECRModel(nn.Module):
         # dense -> 加权-> tsp -> forward
         #features:fearture_list['Train']
         #adj:dataset.adjecancy['Train'], sp arr
-        w_adj = self.w_att(self.w_adj)
+        w_adj = self.w_act(self.w_adj)
+        print(self.w_adj)
         print(w_adj)
 
         comb_adj = torch.zeros(adjs['sent'].shape, device=self.device)
@@ -142,21 +146,21 @@ class ECRModel(nn.Module):
         comb_adj = comb_adj.to_sparse().requires_grad_(True)
         # comb_adj = preprocess_graph(comb_adj)
         # comb_adj = comb_adj.to(self.device)
-        return self.gsl(features, comb_adj.indices(), comb_adj.coalesce().values())  # gae
+        return self.gsl(features, comb_adj.coalesce().indices(), comb_adj.coalesce().values())  # comb_adj.coalesce().indices()无梯度
     
-    def infer(self, features, adj):
+    def infer(self, features, adjs):
         #features:fearture_list['Dev']
         #adj:dataset.adjecancy['Dev']
-        w_adj = self.w_att(self.w_adj)
+        w_adj = self.w_act(self.w_adj)
         w_sum = w_adj[0] + w_adj[1]
         w_adj = w_adj / w_sum.item()
 
-        comb_adj = torch.zeros(adj['sent'].shape, device=self.device)
+        comb_adj = torch.zeros(adjs['sent'].shape, device=self.device)
         for i, s in enumerate(['sent', 'doc']):
-            adj = torch.tensor(adj[s].toarray(), device=self.device)
-            comb_adj += w_adj[i].repeat(adj[s].shape) * adj
+            adj = torch.tensor(adjs[s].toarray(), device=self.device)
+            comb_adj += w_adj[i].repeat(adjs[s].shape) * adj
         comb_adj = comb_adj.to_sparse()
         # comb_adj = preprocess_graph(comb_adj)
         # comb_adj = comb_adj.to(self.device)
-        return self.gsl(features, comb_adj.indices(), comb_adj.coalesce().values())
+        return self.gsl(features, comb_adj.indices(), comb_adj.values())
     

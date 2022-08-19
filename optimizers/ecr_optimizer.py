@@ -35,20 +35,25 @@ class GAEOptimizer(object):
         self.n_edges = n_edges
         # self.w_loss = nn.Parameter(torch.ones(args.n_nodes['Train'], args.n_nodes['Train']), requires_grad=False)
         # self.make_mask()
-        w_loss = self.make_cost_mask()
-        w_loss = w_loss.to(self.device)
-        self.weighted_cost = nn.BCEWithLogitsLoss(weight=w_loss,reduction='sum',pos_weight=pos_weight)
+        # w_loss = self.make_cost_mask()
+        # print("loss weight sum", torch.sum(w_loss))
+        # w_loss = w_loss.to(self.device)
+        self.weighted_cost = nn.BCEWithLogitsLoss(weight=self.make_cost_mask(),reduction='sum',pos_weight=pos_weight)
 
     def make_mask(self):
         self.w_loss = self.w_loss / self.n_nodes['Train']
-        for s in ['doc', 'sent', 'entity_coref', 'event_coref']:   #优先级和顺序相反
+        for s in ['doc', 'sent', 'entity_coref', 'event_coref']:   #优先级与处理顺序相反
             self.w_loss[self.adj_mxs[s].row, self.adj_mxs[s].col] = 1/self.n_edges[s]
 
     def make_cost_mask(self):
-        mask = torch.ones(self.n_nodes['Train'], self.n_nodes['Train']) / self.n_nodes['Train']
-        for s in ['doc', 'sent', 'entity_coref', 'event_coref']:   #优先级和顺序相反
-            mask[self.adj_mxs[s].row, self.adj_mxs[s].col] = 1/self.n_edges[s]
-        return mask
+        # n_edges = self.n_edges - self.n_nodes['Train']
+        mask = torch.ones(self.n_nodes['Train'], self.n_nodes['Train']) / (self.n_nodes['Train'] * self.n_nodes['Train'])
+        for s in ['doc', 'sent', 'entity_coref', 'event_coref']:   #优先级与处理顺序相反
+            n_edge = self.n_edges[s] - self.n_nodes['Train']
+            mask[self.adj_mxs[s].row, self.adj_mxs[s].col] = 1/n_edge
+        # 对角线:负样本
+        print("###1", torch.sum(mask))
+        return mask.to(self.device)
 
     def weighted_loss_function_gvae(self, preds, orig, mu, logvar, norm=1, pos_weight=None, split='Train'):
         """GVAE"""
@@ -215,6 +220,8 @@ class GAEOptimizer(object):
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
+        # print("w.grad", self.model.w_adj.grad)
+        # print(self.model.w_adj, F.softmax(self.model.w_adj))
 
         # print("W.grad:", torch.min(self.model.W.grad), torch.max(self.model.W.grad))
         # print("H.grad:", torch.min(self.model.H.grad), torch.max(self.model.H.grad))

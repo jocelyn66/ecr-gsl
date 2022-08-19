@@ -68,11 +68,14 @@ class GDataset(object):
         # for split in ['Train', 'Dev', 'Test']:
         #     self.adjacency[split][np.diag_indices_from(self.adjacency[split])] = 0
         
-        # #check对称
-        # for split in ['Train', 'Dev', 'Test']:
-        #     assert np.allclose(self.adjacency[split], self.adjacency[split].T, atol=1e-8)
-        #     assert np.allclose(self.event_coref_adj[split],self.event_coref_adj[split].T,atol=1e-8)
-        #     assert np.allclose(self.entity_coref_adj[split],self.entity_coref_adj[split].T,atol=1e-8)
+        #check对称
+        for split in ['Train']:
+            for s in ['event_coref', 'entity_coref', 'sent', 'doc']:
+                assert check_sp_mx_symm(self.adjacency[split][s])
+
+        for split in ['Dev', 'Test']:
+            for s in ['sent', 'doc']:
+                assert check_sp_mx_symm(self.adjacency[split][s])
 
     def get_schema(self, path, split=''):
         # chain的schema, item：(chain descrip, id)
@@ -296,7 +299,7 @@ class GDataset(object):
 
 def refine_adj(sp_mx):
     #对称,对角线置为0
-    sp_mx = sp_mx + sp_mx.T
+    # sp_mx = sp_mx + sp_mx.T
     return (sp_mx - sp.eye(sp_mx.shape[0])).tocoo()
 
 
@@ -322,3 +325,8 @@ def get_examples_indices(sp_mx, idx):
 
     assert len(true_edges[0]) == len(false_edges[0])
     return true_edges, false_edges
+
+
+def check_sp_mx_symm(mx):
+    adj = mx.toarray()
+    return np.allclose(adj, adj.T, atol=1e-8)
